@@ -3,588 +3,416 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Оргструктура — интерактивный редактор</title>
-  <link rel="preconnect" href="https://unpkg.com"/>
+  <title>Оргструктура — редактор</title>
   <style>
     :root{
-      --bg:#0f1220; /* тёмная тема по умолчанию */
-      --panel:#171a2b;
-      --panel-2:#0d1020;
-      --muted:#9aa3b2;
-      --text:#eaf0ff;
-      --accent:#7aa2ff;
-      --accent-2:#25c2a0;
-      --danger:#ff6b6b;
-      --warning:#ffb86b;
-      --border:#222848;
+      --bg:#0f1220; --panel:#171a2b; --panel-2:#0d1020; --text:#eaf0ff; --muted:#9aa3b2; --border:#232947; --accent:#7aa2ff; --danger:#ff6b6b;
     }
     *{box-sizing:border-box}
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial}
-    .app{display:grid;grid-template-columns:320px 1fr 340px;grid-template-rows:auto 1fr;grid-template-areas:
-      "topbar topbar topbar"
-      "left canvas right"; height:100%;}
-    .topbar{grid-area:topbar;display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));position:sticky;top:0;z-index:3}
-    .btn{border:1px solid var(--border);background:#12162a;color:var(--text);padding:8px 10px;border-radius:10px;cursor:pointer;transition:.15s ease;user-select:none}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    .app{display:grid;grid-template-rows:auto 1fr; height:100%}
+    .topbar{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));position:sticky;top:0;z-index:10}
+    .topbar .right{margin-left:auto;display:flex;gap:8px}
+    .btn{border:1px solid var(--border);background:#12162a;color:var(--text);padding:8px 10px;border-radius:10px;cursor:pointer;transition:.15s}
     .btn:hover{border-color:#2f3868;transform:translateY(-1px)}
     .btn.primary{background:linear-gradient(180deg,#2a3370,#1e2655);border-color:#364080}
-    .btn.ghost{background:transparent}
     .btn.warn{background:linear-gradient(180deg,#5e2b2b,#441d1d);border-color:#7a3030}
-    .btn.success{background:linear-gradient(180deg,#21564f,#1a4641);border-color:#2d7e73}
-    .btn.small{padding:6px 8px;font-size:12px}
     .sep{flex:0 0 1px;height:32px;background:var(--border);margin:0 6px}
 
-    .left{grid-area:left;padding:12px;border-right:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));overflow:auto}
-    .right{grid-area:right;padding:12px;border-left:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));overflow:auto}
-    .canvas{grid-area:canvas;position:relative}
-    #cy{position:absolute;inset:0}
+    .stage-wrap{position:relative;overflow:auto}
+    .toolbar{position:absolute;top:12px;left:12px;display:none;gap:8px;padding:8px;border-radius:12px;background:#0c1022;border:1px solid var(--border);box-shadow:0 1px 0 rgba(0,0,0,.4);z-index:5}
+    .toolbar .btn.small{padding:6px 8px;font-size:12px}
+    .badge{display:inline-block;padding:4px 8px;border:1px solid var(--border);border-radius:999px;background:#12162a;color:var(--muted)}
 
-    h2{margin:0 0 10px;font-size:16px}
-    h3{margin:14px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-    label{display:block;margin:8px 0 4px;color:var(--muted)}
-    input, select, textarea{width:100%;padding:8px 10px;border:1px solid var(--border);background:#0c1022;color:var(--text);border-radius:10px}
+    /* Панель диалога */
+    .dialog{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:20}
+    .dialog .card{width:min(460px,90vw);background:#0c1022;border:1px solid var(--border);border-radius:16px;padding:14px}
     .row{display:flex;gap:8px}
-    .row > *{flex:1}
-    .card{background:#0c1022;border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 1px 0 rgba(0,0,0,.3)}
-    .muted{color:var(--muted)}
-    .hint{font-size:12px;color:var(--muted)}
-    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;background:#0a0e1f;border:1px solid var(--border);border-radius:6px;padding:1px 6px;display:inline-block}
+    label{display:block;margin:8px 0 4px;color:var(--muted)}
+    input{width:100%;padding:8px 10px;border:1px solid var(--border);background:#0b0f22;color:var(--text);border-radius:10px}
 
-    .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);padding:6px 8px;border-radius:999px;background:#12162a}
-    .toggle{appearance:none;display:inline-block;width:42px;height:24px;background:#222845;border:1px solid var(--border);border-radius:100px;position:relative;vertical-align:middle;cursor:pointer}
-    .toggle:checked{background:#1c8a6d;border-color:#2d7e73}
-    .toggle:before{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s}
-    .toggle:checked:before{left:22px}
-
-    .footer-hint{position:absolute;right:10px;bottom:10px;color:var(--muted);background:rgba(0,0,0,.25);padding:6px 10px;border-radius:10px;border:1px solid var(--border);backdrop-filter: blur(6px)}
-    a{color:var(--accent)}
+    /* SVG сцена */
+    .stage{width:2000px;height:1200px;background:repeating-conic-gradient(from 0deg, #10142a 0 25%, #0e1226 0 50%) 0 0/24px 24px; border-bottom-left-radius:12px;border-bottom-right-radius:12px}
+    svg{display:block}
+    .node rect{fill:#101735;stroke:#2d3a70;stroke-width:2;rx:12;ry:12}
+    .node text{font:12px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial;fill:#eaf0ff}
+    .node .name{font-weight:700}
+    .node.selected rect{stroke:#7aa2ff}
+    .org rect{fill:#16225a;stroke:#6a7eea;stroke-width:2;rx:14;ry:14}
+    .edge{stroke:#3a9ad9;stroke-width:2;fill:none}
+    .edge.selected{stroke:#7aa2ff}
+    .hint{position:absolute;right:12px;bottom:12px;color:var(--muted);background:rgba(0,0,0,.25);padding:6px 10px;border-radius:10px;border:1px solid var(--border)}
   </style>
 </head>
 <body>
   <div class="app">
     <div class="topbar">
-      <button id="addNodeBtn" class="btn primary">➕ Добавить сотрудника</button>
-      <button id="layoutBtn" class="btn">📐 Автовыравнивание</button>
-      <span class="sep"></span>
-      <label class="pill"><input id="edgeMode" type="checkbox" class="toggle"/> <span>Режим стрелок</span></label>
-      <button id="fitBtn" class="btn ghost">🗺️ Вписать</button>
-      <span class="sep"></span>
-      <button id="exportJsonBtn" class="btn">⬇️ Экспорт JSON</button>
-      <button id="importJsonBtn" class="btn">⬆️ Импорт JSON</button>
-      <button id="exportPngBtn" class="btn">🖼️ PNG</button>
-      <button id="resetBtn" class="btn warn">♻️ Сброс</button>
-      <div style="margin-left:auto" class="muted">Сохранение: локально (авто)</div>
+      <div class="left">
+        <strong>Оргструктура</strong>
+        <span id="saveBadge" class="badge" style="margin-left:8px">Сохранено</span>
+      </div>
+      <div class="right">
+        <button id="exportPngBtn" class="btn">🖼️ PNG</button>
+        <button id="editBtn" class="btn primary">✏️ Редактирование</button>
+      </div>
     </div>
 
-    <div class="left">
-      <h2>Добавить сотрудника</h2>
-      <div class="card">
-        <label>Имя</label>
-        <input id="newName" placeholder="Напр.: Иван Петров" />
-        <label>Должность (необязательно)</label>
-        <input id="newTitle" placeholder="Напр.: Руководитель отдела" />
-        <label>Родитель (начальник)</label>
-        <select id="newParent"></select>
-        <div class="row" style="margin-top:10px">
-          <button id="createBtn" class="btn success">Добавить</button>
-          <button id="layoutAfterAdd" class="btn small">+ Авто‑раскладка</button>
-        </div>
-        <div class="hint" style="margin-top:8px">Совет: оставьте «(нет)» — чтобы создать нового директора.
-        </div>
+    <div class="stage-wrap" id="stageWrap">
+      <!-- Панель инструментов (показывается только в режиме редактирования) -->
+      <div class="toolbar" id="toolbar">
+        <button id="addNodeBtn" class="btn small">➕ Сотрудник</button>
+        <button id="linkModeBtn" class="btn small">➡️ Стрелка</button>
+        <button id="deleteBtn" class="btn small warn">🗑️ Удалить</button>
+        <span id="modeBadge" class="badge">Режим: выбор</span>
       </div>
 
-      <h3>Подсказки</h3>
-      <ul class="hint">
-        <li>Перетягивайте узлы мышью — структура обновится.</li>
-        <li>Включите «Режим стрелок» — тяните от начальника к подчинённому.</li>
-        <li>Двойной клик по пустому месту — снять выделение.</li>
-        <li>Удаление: кнопка в правой панели. Можно удалить узел или всё поддерево.</li>
-      </ul>
+      <!-- SVG сцена -->
+      <svg id="stage" class="stage" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1200">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#3a9ad9"></path>
+          </marker>
+        </defs>
+        <g id="edges"></g>
+        <g id="nodes"></g>
+        <!-- Прямоугольник организации по центру -->
+        <g id="org" class="org" transform="translate(860,40)">
+          <rect x="0" y="0" width="280" height="60" rx="14" ry="14"></rect>
+          <text id="orgText" x="140" y="36" text-anchor="middle" style="font-weight:700;fill:#eaf0ff">Моя организация</text>
+        </g>
+      </svg>
+      <div class="hint">Клик по прямоугольнику в режиме редактирования — выбрать. Перетаскивание — только в режиме редактирования. Стрелки: нажмите «Стрелка», затем кликните ИСТОЧНИК → ЦЕЛЬ.</div>
     </div>
+  </div>
 
-    <div class="canvas">
-      <div id="cy"></div>
-      <div class="footer-hint">⌨️ Горячее: <span class="kbd">L</span> раскладка, <span class="kbd">F</span> вписать, <span class="kbd">Del</span> удалить</div>
-    </div>
-
-    <div class="right">
-      <h2>Свойства узла</h2>
-      <div class="card" id="nodePanel">
-        <div class="muted">Ничего не выбрано. Кликните сотрудника на схеме.</div>
-      </div>
-
-      <h3>Импорт/Экспорт</h3>
-      <div class="card">
-        <div class="row">
-          <button id="quickExportBtn" class="btn">Скопировать JSON</button>
-          <button id="quickImportBtn" class="btn">Вставить JSON</button>
-        </div>
-        <div class="hint" style="margin-top:8px">Формат данных: массив узлов с полями <code>id, name, title, parentId</code> (по одному родителю).</div>
+  <!-- Диалог добавления/редактирования узла -->
+  <div id="dialog" class="dialog">
+    <div class="card">
+      <h3 style="margin:0 0 8px">Сотрудник</h3>
+      <label>ФИО</label>
+      <input id="inpName" placeholder="Напр.: Иван Петров" />
+      <label>Должность</label>
+      <input id="inpTitle" placeholder="Напр.: Руководитель отдела" />
+      <div class="row" style="margin-top:10px">
+        <button id="dlgSave" class="btn primary" style="flex:1">Сохранить</button>
+        <button id="dlgCancel" class="btn" style="flex:1">Отмена</button>
       </div>
     </div>
   </div>
 
-  <!-- libs (порядок важен) -->
-  <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
-  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
-  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
-  <!-- edgehandles зависит от lodash -->
-  <script src="https://unpkg.com/lodash@4.17.21/lodash.min.js"></script>
-  <script>window.lodash = window._;</script>
-  <script src="https://unpkg.com/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.umd.js"></script>
-
   <script>
-    /* ============ Утилиты данных ============ */
-    const STORAGE_KEY = 'orgchart_v1';
-    const uid = () => 'n' + Math.random().toString(36).slice(2,9);
+  // ===== Модель =====
+  const STORAGE_KEY = 'orgchart_svg_v1';
+  const state = load() || {
+    orgName: 'Моя организация',
+    nodes: [], // {id, name, title, x, y, w, h}
+    edges: []  // {id, from, to}
+  };
 
-    function modelFromCy(cy){
-      const nodes = cy.nodes().map(n=>({
-        id: n.id(),
-        name: n.data('name')||'',
-        title: n.data('title')||'',
-        parentId: n.incomers('edge').length ? n.incomers('edge')[0].source().id() : null
-      }));
-      return nodes;
+  // ===== DOM =====
+  const stage = document.getElementById('stage');
+  const gNodes = document.getElementById('nodes');
+  const gEdges = document.getElementById('edges');
+  const org = document.getElementById('org');
+  const orgText = document.getElementById('orgText');
+  const toolbar = document.getElementById('toolbar');
+  const modeBadge = document.getElementById('modeBadge');
+  const saveBadge = document.getElementById('saveBadge');
+  const editBtn = document.getElementById('editBtn');
+  const exportPngBtn = document.getElementById('exportPngBtn');
+  const addNodeBtn = document.getElementById('addNodeBtn');
+  const linkModeBtn = document.getElementById('linkModeBtn');
+  const deleteBtn = document.getElementById('deleteBtn');
+  const dialog = document.getElementById('dialog');
+  const inpName = document.getElementById('inpName');
+  const inpTitle = document.getElementById('inpTitle');
+  const dlgSave = document.getElementById('dlgSave');
+  const dlgCancel = document.getElementById('dlgCancel');
+
+  // ===== Режимы =====
+  let editMode = false;
+  let linkMode = false; // создание стрелок
+  let selectedNodeId = null;
+  let linkSourceId = null;
+  let drag = null; // {id, dx, dy}
+
+  // ===== Утилиты =====
+  function uid(){ return 'n' + Math.random().toString(36).slice(2,9); }
+  function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); showSaved(); }
+  function load(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw? JSON.parse(raw):null; }catch(e){ return null; } }
+  function showSaved(){ saveBadge.textContent = 'Сохранено'; setTimeout(()=> saveBadge.textContent=' ', 1200); }
+  function measureText(lines){ // простая ширина/высота блока
+    const maxLen = Math.max(...lines.map(s=>s.length), 8);
+    const w = Math.min(280, Math.max(140, maxLen*7));
+    const h = 22 + (lines.length*16) + 16; // padding
+    return {w, h};
+  }
+  function getNode(id){ return state.nodes.find(n=>n.id===id); }
+  function removeNode(id){
+    state.nodes = state.nodes.filter(n=>n.id!==id);
+    state.edges = state.edges.filter(e=> e.from!==id && e.to!==id);
+  }
+  function edgeExists(from,to){ return state.edges.some(e=>e.from===from && e.to===to); }
+  function wouldCycle(sourceId, targetId){
+    // Проверка: target не должен быть предком source
+    const parentsOf = new Map();
+    state.edges.forEach(e=>{ const arr = parentsOf.get(e.to)||[]; arr.push(e.from); parentsOf.set(e.to,arr); });
+    const stack=[sourceId]; const seen=new Set();
+    while(stack.length){
+      const cur=stack.pop(); if(seen.has(cur)) continue; seen.add(cur);
+      if(cur===targetId) return true;
+      const ps = parentsOf.get(cur)||[]; stack.push(...ps);
+    }
+    return false;
+  }
+
+  // ===== Рисование =====
+  function draw(){
+    // Заголовок организации
+    orgText.textContent = state.orgName || 'Организация';
+
+    // Узлы
+    gNodes.innerHTML = '';
+    for(const n of state.nodes){
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('class','node'); g.dataset.id = n.id;
+      g.setAttribute('transform', `translate(${n.x},${n.y})`);
+
+      const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+      rect.setAttribute('x',0); rect.setAttribute('y',0);
+      rect.setAttribute('width', n.w); rect.setAttribute('height', n.h);
+      rect.setAttribute('rx',12); rect.setAttribute('ry',12);
+      g.appendChild(rect);
+
+      const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+      text.setAttribute('x', 12); text.setAttribute('y', 18);
+
+      const t1 = document.createElementNS('http://www.w3.org/2000/svg','tspan');
+      t1.setAttribute('class','name'); t1.setAttribute('x',12); t1.setAttribute('dy',0);
+      t1.textContent = n.name || '';
+      text.appendChild(t1);
+      const t2 = document.createElementNS('http://www.w3.org/2000/svg','tspan');
+      t2.setAttribute('x',12); t2.setAttribute('dy',16); t2.textContent = n.title || '';
+      text.appendChild(t2);
+      g.appendChild(text);
+
+      // события
+      g.addEventListener('pointerdown', nodePointerDown);
+      g.addEventListener('click', nodeClick);
+      gNodes.appendChild(g);
     }
 
-    function edgesFromModel(nodes){
-      const edges=[];
-      const ids = new Set(nodes.map(n=>n.id));
-      for(const n of nodes){
-        if(n.parentId && ids.has(n.parentId)){
-          edges.push({ data: { id: `e_${n.parentId}_${n.id}`, source: n.parentId, target: n.id }});
-        }
+    // Рёбра
+    gEdges.innerHTML = '';
+    for(const e of state.edges){
+      const a = getNode(e.from), b=getNode(e.to); if(!a||!b) continue;
+      const x1 = a.x + a.w/2, y1 = a.y + a.h/2;
+      const x2 = b.x + b.w/2, y2 = b.y + b.h/2;
+      const path = document.createElementNS('http://www.w3.org/2000/svg','line');
+      path.setAttribute('x1', x1); path.setAttribute('y1', y1);
+      path.setAttribute('x2', x2); path.setAttribute('y2', y2);
+      path.setAttribute('class','edge');
+      path.setAttribute('marker-end','url(#arrow)');
+      path.dataset.id = e.id;
+      path.addEventListener('click', edgeClick);
+      gEdges.appendChild(path);
+    }
+  }
+
+  function updateEdgesNear(nodeId){
+    // Обновим связанные линии без полного redraw
+    const a = getNode(nodeId); if(!a) return;
+    const lines = gEdges.querySelectorAll('line');
+    lines.forEach(line=>{
+      const id = line.dataset.id; const e = state.edges.find(x=>x.id===id); if(!e) return;
+      const s = getNode(e.from), t=getNode(e.to); if(!s||!t) return;
+      line.setAttribute('x1', s.x + s.w/2); line.setAttribute('y1', s.y + s.h/2);
+      line.setAttribute('x2', t.x + t.w/2); line.setAttribute('y2', t.y + t.h/2);
+    });
+  }
+
+  // ===== Выделение/режимы =====
+  function clearSelection(){
+    selectedNodeId = null;
+    const sel = stage.querySelector('.node.selected'); if(sel) sel.classList.remove('selected');
+  }
+  function selectNode(id){
+    clearSelection(); selectedNodeId = id;
+    const g = [...gNodes.children].find(x=>x.dataset.id===id); if(g) g.classList.add('selected');
+  }
+
+  // ===== События узлов =====
+  function nodePointerDown(ev){
+    if(!editMode) return;
+    const g = ev.currentTarget; const id = g.dataset.id; selectNode(id);
+    const n = getNode(id);
+    const pt = getSvgPoint(ev);
+    drag = { id, dx: pt.x - n.x, dy: pt.y - n.y };
+    window.addEventListener('pointermove', nodePointerMove);
+    window.addEventListener('pointerup', nodePointerUp, { once:true });
+  }
+  function nodePointerMove(ev){
+    if(!drag) return; const n = getNode(drag.id); if(!n) return;
+    const pt = getSvgPoint(ev); n.x = pt.x - drag.dx; n.y = pt.y - drag.dy;
+    const g = [...gNodes.children].find(x=>x.dataset.id===n.id); if(g){ g.setAttribute('transform',`translate(${n.x},${n.y})`); }
+    updateEdgesNear(n.id);
+  }
+  function nodePointerUp(){ drag = null; save(); }
+
+  function nodeClick(ev){
+    ev.stopPropagation(); const id = ev.currentTarget.dataset.id;
+    if(!editMode){ return; }
+    if(linkMode){
+      if(!linkSourceId){ linkSourceId = id; modeBadge.textContent = 'Выбрано начало стрелки'; selectNode(id); }
+      else{
+        if(linkSourceId===id){ linkSourceId=null; modeBadge.textContent='Режим: стрелка'; return; }
+        if(edgeExists(linkSourceId,id)){ alert('Такая связь уже есть.'); linkSourceId=null; modeBadge.textContent='Режим: стрелка'; return; }
+        if(wouldCycle(linkSourceId,id)){ alert('Нельзя создать цикл.'); linkSourceId=null; modeBadge.textContent='Режим: стрелка'; return; }
+        const e = { id:'e_'+uid(), from:linkSourceId, to:id };
+        state.edges.push(e); linkSourceId=null; draw(); save(); modeBadge.textContent='Режим: стрелка';
       }
-      return edges;
+    }else{
+      selectNode(id);
     }
+  }
 
-    function hasCycleIfAddEdge(cy, sourceId, targetId){
-      // если целевой узел является (прямым или косвенным) предком sourceId — будет цикл
-      const stack=[sourceId];
-      const visited=new Set();
-      while(stack.length){
-        const cur=stack.pop(); if(visited.has(cur)) continue; visited.add(cur);
-        if(cur===targetId) return true;
-        const parents = cy.getElementById(cur).incomers('edge').sources();
-        parents.forEach(p=>stack.push(p.id()));
-      }
-      return false;
+  function edgeClick(ev){
+    if(!editMode) return; ev.stopPropagation();
+    clearSelection(); // выделяем ребро визуально
+    ev.currentTarget.classList.toggle('selected');
+  }
+
+  function getSvgPoint(ev){
+    const pt = stage.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    return pt.matrixTransform(stage.getScreenCTM().inverse());
+  }
+
+  // ===== Кнопки верхней панели =====
+  editBtn.addEventListener('click', ()=>{
+    editMode = !editMode; toolbar.style.display = editMode? 'flex':'none';
+    editBtn.textContent = editMode? '✅ Готово' : '✏️ Редактирование';
+    linkMode = false; linkSourceId=null; modeBadge.textContent = 'Режим: выбор';
+  });
+
+  exportPngBtn.addEventListener('click', exportPNG);
+
+  // ===== Инструменты тулбара =====
+  addNodeBtn.addEventListener('click', ()=>{
+    if(!editMode){ alert('Включите режим редактирования.'); return; }
+    openDialog('', '');
+  });
+
+  linkModeBtn.addEventListener('click', ()=>{
+    if(!editMode){ alert('Включите режим редактирования.'); return; }
+    linkMode = !linkMode; linkSourceId=null;
+    modeBadge.textContent = linkMode? 'Режим: стрелка' : 'Режим: выбор';
+  });
+
+  deleteBtn.addEventListener('click', ()=>{
+    if(!editMode){ alert('Включите режим редактирования.'); return; }
+    // Удалить выбранный узел или выделенное ребро
+    const edgeSel = gEdges.querySelector('.edge.selected');
+    if(edgeSel){
+      const id = edgeSel.dataset.id; state.edges = state.edges.filter(e=>e.id!==id); draw(); save(); return;
     }
+    if(!selectedNodeId){ alert('Сначала выберите сотрудника.'); return; }
+    if(!confirm('Удалить выбранного сотрудника?')) return;
+    removeNode(selectedNodeId); clearSelection(); draw(); save();
+  });
 
-    function listNodesForSelect(cy, includeNone=true){
-      const items = includeNone ? [{id:'', name:'(нет)'}] : [];
-      cy.nodes().forEach(n=> items.push({id:n.id(), name:n.data('name')||n.id()}));
-      return items;
-    }
+  // ===== Диалог =====
+  function openDialog(name,title){
+    dialog.style.display='flex'; inpName.value=name||''; inpTitle.value=title||''; inpName.focus();
+  }
+  dlgCancel.addEventListener('click', ()=> dialog.style.display='none');
+  dlgSave.addEventListener('click', ()=>{
+    const name = inpName.value.trim(); if(!name){ alert('Введите ФИО'); return; }
+    const title = inpTitle.value.trim();
+    // позиция — рядом с прямоугольником организации или центром экрана
+    const x = 200 + Math.random()*200, y = 160 + Math.random()*120;
+    const {w,h} = measureText([name, title]);
+    const node = { id: uid(), name, title, x, y, w, h };
+    state.nodes.push(node); dialog.style.display='none'; draw(); save();
+  });
 
-    function save(cy){
-      const data = modelFromCy(cy);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    }
+  // Ренейм организации по клику в режиме редактирования
+  org.addEventListener('click', ()=>{
+    if(!editMode) return;
+    const v = prompt('Название организации:', state.orgName||'');
+    if(v!=null){ state.orgName = v.trim() || 'Организация'; draw(); save(); }
+  });
 
-    function load(){
-      try{
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if(!raw) return null;
-        return JSON.parse(raw);
-      }catch(e){
-        console.warn('load error', e); return null;
-      }
-    }
+  // Клик по пустому месту для снятия выделения
+  stage.addEventListener('click', ()=>{ if(!editMode) return; clearSelection(); const es=gEdges.querySelector('.edge.selected'); if(es) es.classList.remove('selected'); });
 
-    function download(filename, text){
-      const a=document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([text],{type:'application/json'}));
-      a.download = filename; a.click(); URL.revokeObjectURL(a.href);
-    }
+  // Удаление по клавише Del
+  window.addEventListener('keydown', (e)=>{
+    if(!editMode) return;
+    if(e.key==='Delete') deleteBtn.click();
+  });
 
-    /* ============ Инициализация графа ============ */
-    // Надёжная регистрация плагинов (UMD/auto-attach совместимо)
-try { if (typeof window.cytoscapeDagre !== 'undefined') { cytoscape.use(window.cytoscapeDagre); } } catch(e){ console.warn('dagre use error', e); }
-try { if (typeof window.cytoscapeEdgehandles !== 'undefined') { cytoscape.use(window.cytoscapeEdgehandles); } } catch(e){ console.warn('edgehandles use error', e); }
+  // ===== Экспорт PNG =====
+  function exportPNG(){
+    // Временная рамка вокруг контента
+    const bbox = stage.getBBox();
+    const margin = 24;
+    const w = Math.max(600, bbox.width + margin*2);
+    const h = Math.max(300, bbox.height + margin*2);
 
-    const cy = cytoscape({
-      container: document.getElementById('cy'),
-      autoungrabify: false,
-      wheelSensitivity: 0.2,
-      minZoom: 0.1,
-      maxZoom: 3,
-      style: [
-        { selector: 'node', style: {
-          'shape': 'round-rectangle',
-          'background-color':'#101735',
-          'border-width':2,
-          'border-color':'#2d3a70',
-          'width':'auto',
-          'height':'auto',
-          'padding':'10px',
-          'text-wrap':'wrap',
-          'text-max-width':'160px',
-          'font-size':'12px',
-          'label': ele => {
-            const name=ele.data('name')||''; const t=ele.data('title');
-            return t? name+'\n'+t : name;
-          },
-          'color':'#eaf0ff',
-          'text-valign':'center',
-          'text-halign':'center',
-          'text-outline-color':'#0000',
-          'text-outline-width':0,
-        }},
-        { selector:'node.root', style:{
-          'background-gradient-stop-colors':'#24357a #1b255b',
-          'background-gradient-direction':'to-bottom',
-          'background-fill':'linear-gradient',
-          'border-color':'#6a7eea',
-          'font-weight':'bold'
-        }},
-        { selector:'edge', style:{
-          'line-color':'#3a9ad9',
-          'target-arrow-color':'#3a9ad9',
-          'target-arrow-shape':'triangle',
-          'curve-style':'bezier',
-          'width':2
-        }},
-        { selector:':selected', style:{
-          'border-color':'#7aa2ff',
-          'line-color':'#7aa2ff',
-          'target-arrow-color':'#7aa2ff',
-          'background-color':'#16225a'
-        }}
-      ],
-      elements: []
-    });
+    const clone = stage.cloneNode(true);
+    clone.setAttribute('viewBox', `${bbox.x - margin} ${bbox.y - margin} ${w} ${h}`);
+    clone.setAttribute('width', w);
+    clone.setAttribute('height', h);
 
-    // Edgehandles (добавление стрелок перетаскиванием) — безопасная инициализация
-    let eh = null;
-    function tryInitEdgehandles(){
-      try{
-        if(typeof cy.edgehandles === 'function') return true;
-        if(typeof window !== 'undefined'){
-          if(typeof window.cytoscapeEdgehandles !== 'undefined') cytoscape.use(window.cytoscapeEdgehandles);
-          else if(typeof window.cytoscapeedgehandles !== 'undefined') cytoscape.use(window.cytoscapeedgehandles);
-        }
-        if(typeof cytoscapeEdgehandles !== 'undefined') cytoscape.use(cytoscapeEdgehandles);
-        return typeof cy.edgehandles === 'function';
-      }catch(err){
-        console.warn('edgehandles init error', err);
-        return false;
-      }
-    }
-        if(typeof cytoscapeEdgehandles !== 'undefined') cytoscape.use(cytoscapeEdgehandles);
-        return typeof cy.edgehandles === 'function';
-      }catch(err){ console.warn('edgehandles init error', err); return false; }
-    }
-    if(tryInitEdgehandles()){
-      eh = cy.edgehandles({
-        toggleOffOnLeave: true,
-        handleSize: 10,
-        handleNodes: 'node',
-        handleColor: '#25c2a0',
-        edgeType: (sourceNode, targetNode) => 'flat',
-        loopAllowed: () => false,
-        complete: (sourceNode, targetNodes, addedEntities) => {
-          const sId = sourceNode.id();
-          const t = targetNodes[0]; if(!t) return;
-          const tId = t.id();
-          if(hasCycleIfAddEdge(cy, sId, tId)){
-            alert('Нельзя создать цикл.');
-            if(addedEntities && addedEntities.edges) addedEntities.edges.remove();
-            return;
-          }
-          const incoming = t.incomers('edge');
-          if(incoming.length){ incoming.remove(); }
-          const edgeEnt = addedEntities && addedEntities.edges && addedEntities.edges[0];
-          if(edgeEnt){ edgeEnt.data('id', `e_${sId}_${tId}`); }
-          else { cy.add({ data:{ id:`e_${sId}_${tId}`, source:sId, target:tId }}); }
-          layout();
-          save(cy);
-        }
-      });
-    }
-        const t = targetNodes[0]; if(!t) return;
-        const tId = t.id();
-        // Запрещаем циклы
-        if(hasCycleIfAddEdge(cy, sId, tId)){
-          alert('Нельзя создать цикл.');
-          addedEntities.edges.remove();
-          return;
-        }
-        // Один родитель на ноду: если уже есть — пересоздаём
-        const incoming = t.incomers('edge');
-        if(incoming.length){ incoming.remove(); }
-        // Переименуем системный id ребра
-        const edgeEnt = addedEntities && addedEntities.edges && addedEntities.edges[0];
-        if(edgeEnt){ edgeEnt.data('id', `e_${sId}_${tId}`); }
-        else { cy.add({ data:{ id:`e_${sId}_${tId}`, source:sId, target:tId }}); }
-        layout();
-        save(cy);
-      }
-    });
+    // инлайн фон
+    clone.setAttribute('style', getComputedStyle(stage).cssText);
 
-    // Переключатель режима стрелок
-    const edgeToggle = document.getElementById('edgeMode');
-    edgeToggle.addEventListener('change', ()=>{
-      if(!eh){
-        edgeToggle.checked = false;
-        alert('Режим стрелок недоступен: плагин не загрузился. Используйте правую панель, чтобы назначать родителя.');
-        return;
-      }
-      if(edgeToggle.checked) eh.enable(); else eh.disable();
-    });
-    if(eh){ eh.disable(); } else {
-      edgeToggle.disabled = true;
-      const lbl = edgeToggle.parentElement && edgeToggle.parentElement.querySelector('span');
-      if(lbl) lbl.textContent = 'Режим стрелок (недоступен)';
-    }
-    });
-    eh.disable(); // по умолчанию выключен
+    const svgData = new XMLSerializer().serializeToString(clone);
+    const svgBlob = new Blob([svgData], {type:'image/svg+xml;charset=utf-8'});
+    const url = URL.createObjectURL(svgBlob);
 
-    /* ============ Начальные данные ============ */
-    const demoData = [
-      {id:'ceo', name:'Директор', title:'Генеральный директор', parentId:null},
-      {id:'ops', name:'Операции', title:'COO', parentId:'ceo'},
-      {id:'sales', name:'Продажи', title:'Руководитель отдела', parentId:'ceo'},
-      {id:'it', name:'ИТ-отдел', title:'CTO', parentId:'ceo'},
-      {id:'hr', name:'HR', title:'Менеджер', parentId:'ops'},
-      {id:'am1', name:'Аккаунт-менеджер 1', title:'', parentId:'sales'},
-      {id:'dev1', name:'Разработчик 1', title:'Frontend', parentId:'it'},
-    ];
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; // белый фон PNG
+      ctx.fillRect(0,0,w,h);
+      ctx.drawImage(img, 0,0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = 'orgchart.png'; a.click();
+        setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+      }, 'image/png');
+    };
+    img.src = url;
+  }
 
-    function mountModel(nodes){
-      cy.elements().remove();
-      const edges = edgesFromModel(nodes);
-      const els = [
-        ...nodes.map(n=>({ data: { id:n.id, name:n.name, title:n.title }, classes: n.parentId? '' : 'root'})),
-        ...edges
-      ];
-      cy.add(els);
-      layout();
-      save(cy);
-    }
+  // ===== Старт =====
+  // Центровка организации (если нет сохранения)
+  if(!load()){
+    // уже стоит по умолчанию transform="translate(860,40)"
+  }
+  draw();
 
-    function layout(){
-      try{
-        cy.layout({ name:'dagre', nodeSep: 36, rankSep: 72, edgeSep: 12, rankDir:'TB' }).run();
-      }catch(e){
-        console.warn('Dagre layout не доступен, fallback → breadthfirst', e);
-        cy.layout({ name:'breadthfirst', directed:true, spacingFactor:1.2 }).run();
-      }
-    }).run();
-    }
-
-    // Загрузка из localStorage или демо
-    const initial = load();
-    mountModel(initial || demoData);
-
-    /* ============ Панель добавления ============ */
-    const newName = document.getElementById('newName');
-    const newTitle = document.getElementById('newTitle');
-    const newParent = document.getElementById('newParent');
-    refreshParentSelect();
-
-    function refreshParentSelect(){
-      const items = listNodesForSelect(cy, true);
-      newParent.innerHTML = items.map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
-      // Обновим «назначить родителя» в панели узла, если она есть
-      const parentSel = document.getElementById('propParent');
-      if(parentSel){
-        parentSel.innerHTML = listNodesForSelect(cy, true).map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
-      }
-    }
-
-    document.getElementById('createBtn').addEventListener('click', ()=>{
-      const name = (newName.value||'').trim(); if(!name){ alert('Введите имя'); return; }
-      const title = (newTitle.value||'').trim();
-      const parentId = newParent.value || null;
-      const id = uid();
-      cy.add({ data:{ id, name, title }, classes: parentId? '' : 'root' });
-      if(parentId){ cy.add({ data:{ id:`e_${parentId}_${id}`, source:parentId, target:id }}); }
-      if(document.getElementById('layoutAfterAdd').classList.contains('active')) layout();
-      refreshParentSelect();
-      save(cy);
-      newName.value=''; newTitle.value='';
-    });
-
-    document.getElementById('layoutAfterAdd').addEventListener('click', (e)=>{
-      e.currentTarget.classList.toggle('active');
-      e.currentTarget.textContent = e.currentTarget.classList.contains('active') ? 'Авто‑раскладка: ВКЛ' : 'Авто‑раскладка: ВЫКЛ';
-    });
-
-    /* ============ Панель свойств узла ============ */
-    const nodePanel = document.getElementById('nodePanel');
-
-    function renderNodePanel(node){
-      if(!node){ nodePanel.innerHTML = '<div class="muted">Ничего не выбрано. Кликните сотрудника на схеме.</div>'; return; }
-      const data = node.data();
-      const parent = node.incomers('edge').length ? node.incomers('edge')[0].source().id() : '';
-      nodePanel.innerHTML = `
-        <label>Имя</label>
-        <input id="propName" value="${(data.name||'').replaceAll('"','&quot;')}"/>
-        <label>Должность</label>
-        <input id="propTitle" value="${(data.title||'').replaceAll('"','&quot;')}"/>
-        <label>Родитель (начальник)</label>
-        <select id="propParent"></select>
-        <div class="row" style="margin-top:10px">
-          <button id="applyBtn" class="btn success">Сохранить</button>
-          <button id="deleteBtn" class="btn warn">Удалить узел</button>
-        </div>
-        <button id="deleteSubtreeBtn" class="btn warn" style="margin-top:8px;width:100%">Удалить поддерево</button>
-        <div class="hint" style="margin-top:8px">Поддерево = узел и все его подчинённые.</div>
-      `;
-      // заполнить список родителей
-      const sel = nodePanel.querySelector('#propParent');
-      sel.innerHTML = listNodesForSelect(cy,true).map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
-      sel.value = parent || '';
-
-      nodePanel.querySelector('#applyBtn').onclick = ()=>{
-        const name = nodePanel.querySelector('#propName').value.trim();
-        const title = nodePanel.querySelector('#propTitle').value.trim();
-        const newParentId = nodePanel.querySelector('#propParent').value || null;
-        node.data({ ...node.data(), name, title });
-        // класс root
-        if(newParentId){ node.removeClass('root'); } else { node.addClass('root'); }
-        // переназначить родителя
-        const incoming = node.incomers('edge');
-        if(incoming.length){ incoming.remove(); }
-        if(newParentId){
-          // запрет цикла
-          if(hasCycleIfAddEdge(cy, newParentId, node.id())){
-            alert('Нельзя назначить родителя: образуется цикл.');
-          }else{
-            cy.add({ data:{ id:`e_${newParentId}_${node.id()}`, source:newParentId, target:node.id() }});
-          }
-        }
-        layout();
-        refreshParentSelect();
-        save(cy);
-      };
-
-      nodePanel.querySelector('#deleteBtn').onclick = ()=>{
-        if(!confirm('Удалить только выбранный узел? Его подчинённые перейдут на верхний уровень.')) return;
-        // Сохраним детей, удалим ноду, потом детей переподнимем
-        const id = node.id();
-        const children = node.outgoers('edge').targets();
-        // Удалить все рёбра, где участвует нода
-        cy.remove(node.connectedEdges());
-        node.remove();
-        // Поднять детей на верхний уровень (без родителя)
-        children.forEach(ch=> ch.addClass('root'));
-        layout();
-        refreshParentSelect();
-        save(cy);
-        renderNodePanel(null);
-      };
-
-      nodePanel.querySelector('#deleteSubtreeBtn').onclick = ()=>{
-        if(!confirm('Удалить узел И все его подчинённые?')) return;
-        const subtree = node.union(node.successors());
-        cy.remove(subtree);
-        layout();
-        refreshParentSelect();
-        save(cy);
-        renderNodePanel(null);
-      };
-    }
-
-    cy.on('tap', 'node', (e)=>{
-      renderNodePanel(e.target);
-    });
-
-    cy.on('tap', (e)=>{
-      if(e.target === cy){ renderNodePanel(null); }
-    });
-
-    cy.on('dragfree', 'node', ()=> save(cy));
-
-    /* ============ Верхняя панель кнопок ============ */
-    document.getElementById('addNodeBtn').addEventListener('click', ()=>{
-      newName.focus();
-      newName.select();
-    });
-
-    document.getElementById('layoutBtn').addEventListener('click', layout);
-    document.getElementById('fitBtn').addEventListener('click', ()=> cy.fit(undefined, 30));
-
-    document.getElementById('exportJsonBtn').addEventListener('click', ()=>{
-      const data = JSON.stringify(modelFromCy(cy), null, 2);
-      download('orgchart.json', data);
-    });
-
-    document.getElementById('importJsonBtn').addEventListener('click', async ()=>{
-      const inp = document.createElement('input'); inp.type='file'; inp.accept='application/json';
-      inp.onchange = async ()=>{
-        const file = inp.files[0]; if(!file) return;
-        const text = await file.text();
-        try{
-          const nodes = JSON.parse(text);
-          mountModel(nodes);
-        }catch(e){ alert('Ошибка чтения JSON: '+e.message); }
-      };
-      inp.click();
-    });
-
-    document.getElementById('exportPngBtn').addEventListener('click', ()=>{
-      const png = cy.png({ full:true, scale:2, bg:'white' });
-      const a = document.createElement('a'); a.href=png; a.download='orgchart.png'; a.click();
-    });
-
-    document.getElementById('resetBtn').addEventListener('click', ()=>{
-      if(!confirm('Сбросить к демо‑структуре? Текущие данные будут удалены.')) return;
-      localStorage.removeItem(STORAGE_KEY);
-      mountModel(demoData);
-    });
-
-    // Быстрый экспорт/импорт через буфер
-    document.getElementById('quickExportBtn').addEventListener('click', async ()=>{
-      const data = JSON.stringify(modelFromCy(cy), null, 2);
-      try{ await navigator.clipboard.writeText(data); alert('JSON скопирован в буфер обмена'); }
-      catch{ download('orgchart.json', data); }
-    });
-
-    document.getElementById('quickImportBtn').addEventListener('click', async ()=>{
-      const text = prompt('Вставьте JSON (массив узлов):');
-      if(!text) return;
-      try{ const nodes = JSON.parse(text); mountModel(nodes); }
-      catch(e){ alert('Ошибка JSON: '+e.message); }
-    });
-
-    /* ============ Клавиатура ============ */
-    window.addEventListener('keydown', (e)=>{
-      if(e.key==='L' || e.key==='л'){ layout(); }
-      if(e.key==='F' || e.key==='а'){ cy.fit(undefined, 30); }
-      if(e.key==='Delete'){
-        const sel = cy.$('node:selected');
-        if(sel.length){
-          if(confirm('Удалить только выбранный узел? (не поддерево)')){
-            const node = sel[0];
-            const children = node.outgoers('edge').targets();
-            cy.remove(node.connectedEdges());
-            node.remove();
-            children.forEach(ch=> ch.addClass('root'));
-            layout(); refreshParentSelect(); save(cy); renderNodePanel(null);
-          }
-        }
-      }
-    });
-
-  // ---- Простые самотесты (не падают, только предупреждают в консоли)
-    (function selfTests(){
-      console.group('Orgchart self-tests');
-      try{
-        console.assert(typeof cytoscape === 'function', 'Cytoscape не загружен');
-        console.assert(cy && cy.nodes && typeof cy.nodes === 'function', 'cy не инициализирован');
-        const count = cy.nodes().length;
-        console.assert(count > 0, 'В демо-модели должны быть узлы');
-        const tmpId = 'tmp_'+Date.now();
-        cy.add({ data:{ id: tmpId, name:'TEST', title:'' }, classes:'root' });
-        console.assert(cy.getElementById(tmpId).length === 1, 'Временный узел добавлен');
-        cy.getElementById(tmpId).remove();
-        console.assert(cy.nodes().length === count, 'Временный узел удалён');
-        console.log('edgehandles доступен:', typeof cy.edgehandles === 'function');
-      }catch(e){ console.warn('Self-tests error:', e); }
-      console.groupEnd();
-    })();
+  // ===== Самотесты (не ломают, только в консоли) =====
+  (function selfTests(){
+    console.group('Self-tests');
+    try{
+      console.assert(stage instanceof SVGElement, 'SVG сцена должна существовать');
+      const before = state.nodes.length;
+      const {w,h} = measureText(['Тест','Должность']);
+      console.assert(w>0 && h>0, 'Размеры текста рассчитаны');
+      const tnode = { id:'t', name:'T', title:'T', x:10,y:10,w,h };
+      state.nodes.push(tnode); draw();
+      const g = [...gNodes.children].find(e=>e.dataset.id==='t');
+      console.assert(!!g, 'Узел отрисован');
+      removeNode('t'); draw();
+      console.assert(state.nodes.length===before, 'Узел удалён');
+    }catch(e){ console.warn('Self-tests error:', e); }
+    console.groupEnd();
+  })();
   </script>
 </body>
 </html>
