@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Оргструктура — интерактивный редактор</title>
+  <style>
+    :root{
+      --bg:#0f1220; --panel:#171a2b; --panel-2:#0d1020;
+      --muted:#9aa3b2; --text:#eaf0ff; --accent:#7aa2ff;
+      --border:#222848; --danger:#ff6b6b;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    .app{display:grid;grid-template-columns:320px 1fr 340px;grid-template-rows:auto 1fr;grid-template-areas:"topbar topbar topbar" "left canvas right";height:100%}
+    .topbar{grid-area:topbar;display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));position:sticky;top:0;z-index:3}
+    .btn{border:1px solid var(--border);background:#12162a;color:var(--text);padding:8px 10px;border-radius:10px;cursor:pointer;transition:.15s}
+    .btn:hover{border-color:#2f3868;transform:translateY(-1px)} .btn.primary{background:linear-gradient(180deg,#2a3370,#1e2655);border-color:#364080}
+    .btn.warn{background:linear-gradient(180deg,#5e2b2b,#441d1d);border-color:#7a3030}
+    .btn.success{background:linear-gradient(180deg,#21564f,#1a4641);border-color:#2d7e73}
+    .btn.small{padding:6px 8px;font-size:12px}
+    .sep{flex:0 0 1px;height:32px;background:var(--border);margin:0 6px}
+    .left{grid-area:left;padding:12px;border-right:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));overflow:auto}
+    .right{grid-area:right;padding:12px;border-left:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));overflow:auto}
+    .canvas{grid-area:canvas;position:relative} #cy{position:absolute;inset:0}
+    h2{margin:0 0 10px;font-size:16px} h3{margin:14px 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    label{display:block;margin:8px 0 4px;color:var(--muted)}
+    input,select{width:100%;padding:8px 10px;border:1px solid var(--border);background:#0c1022;color:var(--text);border-radius:10px}
+    .row{display:flex;gap:8px} .row>*{flex:1}
+    .card{background:#0c1022;border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 1px 0 rgba(0,0,0,.3)}
+    .hint{font-size:12px;color:var(--muted)}
+    .toggle{appearance:none;display:inline-block;width:42px;height:24px;background:#222845;border:1px solid var(--border);border-radius:100px;position:relative;cursor:pointer}
+    .toggle:checked{background:#1c8a6d;border-color:#2d7e73}
+    .toggle:before{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s}
+    .toggle:checked:before{left:22px}
+    .footer-hint{position:absolute;right:10px;bottom:10px;color:var(--muted);background:rgba(0,0,0,.25);padding:6px 10px;border-radius:10px;border:1px solid var(--border);backdrop-filter: blur(6px)}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <button id="addNodeBtn" class="btn primary">➕ Добавить сотрудника</button>
+      <button id="layoutBtn" class="btn">📐 Автовыравнивание</button>
+      <span class="sep"></span>
+      <label style="display:flex;align-items:center;gap:8px"><input id="edgeMode" type="checkbox" class="toggle"/> <span id="edgeModeLbl">Режим стрелок</span></label>
+      <button id="fitBtn" class="btn">🗺️ Вписать</button>
+      <span class="sep"></span>
+      <button id="exportJsonBtn" class="btn">⬇️ Экспорт JSON</button>
+      <button id="importJsonBtn" class="btn">⬆️ Импорт JSON</button>
+      <button id="exportPngBtn" class="btn">🖼️ PNG</button>
+      <button id="resetBtn" class="btn warn">♻️ Сброс</button>
+      <div style="margin-left:auto" class="hint">Автосохранение в браузере</div>
+    </div>
+
+    <div class="left">
+      <h2>Добавить сотрудника</h2>
+      <div class="card">
+        <label>Имя</label>
+        <input id="newName" placeholder="Напр.: Иван Петров" />
+        <label>Должность (необязательно)</label>
+        <input id="newTitle" placeholder="Напр.: Руководитель отдела" />
+        <label>Родитель (начальник)</label>
+        <select id="newParent"></select>
+        <div class="row" style="margin-top:10px">
+          <button id="createBtn" class="btn success">Добавить</button>
+          <button id="layoutAfterAdd" class="btn small">Авто-раскладка: ВЫКЛ</button>
+        </div>
+        <div class="hint" style="margin-top:8px">Совет: оставьте «(нет)» — чтобы создать нового директора.</div>
+      </div>
+      <h3>Подсказки</h3>
+      <ul class="hint">
+        <li>Перетягивайте узлы мышью.</li>
+        <li>«Режим стрелок» — тяните от начальника к подчинённому.</li>
+        <li>Удаление узла/поддерева — в правой панели.</li>
+      </ul>
+    </div>
+
+    <div class="canvas">
+      <div id="cy"></div>
+      <div class="footer-hint">Горячие клавиши: L — раскладка, F — вписать, Del — удалить узел</div>
+    </div>
+
+    <div class="right">
+      <h2>Свойства узла</h2>
+      <div class="card" id="nodePanel"><div class="hint">Кликните сотрудника на схеме.</div></div>
+      <h3>Импорт/Экспорт</h3>
+      <div class="card">
+        <div class="row">
+          <button id="quickExportBtn" class="btn">Скопировать JSON</button>
+          <button id="quickImportBtn" class="btn">Вставить JSON</button>
+        </div>
+        <div class="hint" style="margin-top:8px">Формат: массив объектов {id, name, title, parentId}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Библиотеки (порядок важен) -->
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+  <script>window.lodash = window._;</script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.umd.js"></script>
+
+  <script>
+    // Регистрация плагинов (без падений, если чего-то нет)
+    try { if (window.cytoscapeDagre) cytoscape.use(window.cytoscapeDagre); } catch(e){}
+    try { if (window.cytoscapeEdgehandles) cytoscape.use(window.cytoscapeEdgehandles); } catch(e){}
+
+    const STORAGE_KEY = 'orgchart_v1';
+    const uid = () => 'n' + Math.random().toString(36).slice(2,9);
+
+    function edgesFromModel(nodes){
+      const edges=[]; const ids=new Set(nodes.map(n=>n.id));
+      for(const n of nodes){ if(n.parentId && ids.has(n.parentId)){
+        edges.push({ data:{ id:`e_${n.parentId}_${n.id}`, source:n.parentId, target:n.id }});
+      }}
+      return edges;
+    }
+
+    function modelFromCy(cy){
+      return cy.nodes().map(n=>({
+        id:n.id(),
+        name:n.data('name')||'',
+        title:n.data('title')||'',
+        parentId:n.incomers('edge').length ? n.incomers('edge')[0].source().id() : null
+      }));
+    }
+
+    function hasCycleIfAddEdge(cy, sourceId, targetId){
+      const stack=[sourceId], seen=new Set();
+      while(stack.length){
+        const cur=stack.pop(); if(seen.has(cur)) continue; seen.add(cur);
+        if(cur===targetId) return true;
+        const parents=cy.getElementById(cur).incomers('edge').sources();
+        parents.forEach(p=>stack.push(p.id()));
+      }
+      return false;
+    }
+
+    function save(cy){ localStorage.setItem(STORAGE_KEY, JSON.stringify(modelFromCy(cy))); }
+    function load(){
+      try { const raw=localStorage.getItem(STORAGE_KEY); return raw? JSON.parse(raw):null; }
+      catch(e){ return null; }
+    }
+
+    const cy = cytoscape({
+      container: document.getElementById('cy'),
+      wheelSensitivity: .2, minZoom:.1, maxZoom:3,
+      style:[
+        { selector:'node', style:{
+          'shape':'round-rectangle','background-color':'#101735','border-width':2,'border-color':'#2d3a70',
+          'width':'label','height':'label','padding':'10px','text-wrap':'wrap','text-max-width':'160px',
+          'font-size':'12px','label': ele => {
+            const name=ele.data('name')||''; const t=ele.data('title'); return t? name+'\\n'+t : name;
+          },'color':'#eaf0ff','text-valign':'center','text-halign':'center','shadow-blur':8,'shadow-opacity':.25,'shadow-color':'#000','shadow-offset-y':2
+        }},
+        { selector:'node.root', style:{
+          'background-gradient-stop-colors':'#24357a #1b255b','background-gradient-direction':'to-bottom',
+          'background-fill':'linear-gradient','border-color':'#6a7eea','font-weight':'bold'
+        }},
+        { selector:'edge', style:{
+          'line-color':'#3a9ad9','target-arrow-color':'#3a9ad9','target-arrow-shape':'triangle','curve-style':'bezier','width':2
+        }},
+        { selector:':selected', style:{
+          'border-color':'#7aa2ff','line-color':'#7aa2ff','target-arrow-color':'#7aa2ff','background-color':'#16225a'
+        }}
+      ],
+      elements:[]
+    });
+
+    function layout(){
+      try{ cy.layout({ name:'dagre', nodeSep:36, rankSep:72, edgeSep:12, rankDir:'TB' }).run(); }
+      catch(e){ cy.layout({ name:'breadthfirst', directed:true, spacingFactor:1.2 }).run(); }
+    }
+
+    const demoData = [
+      {id:'ceo', name:'Директор', title:'Генеральный директор', parentId:null},
+      {id:'ops', name:'Операции', title:'COO', parentId:'ceo'},
+      {id:'sales', name:'Продажи', title:'Руководитель отдела', parentId:'ceo'},
+      {id:'it', name:'ИТ-отдел', title:'CTO', parentId:'ceo'},
+      {id:'hr', name:'HR', title:'Менеджер', parentId:'ops'},
+      {id:'am1', name:'Аккаунт-менеджер 1', title:'', parentId:'sales'},
+      {id:'dev1', name:'Разработчик 1', title:'Frontend', parentId:'it'},
+    ];
+
+    function mountModel(nodes){
+      cy.elements().remove();
+      const edges = edgesFromModel(nodes);
+      cy.add([
+        ...nodes.map(n=>({ data:{ id:n.id, name:n.name, title:n.title }, classes: n.parentId? '' : 'root'})),
+        ...edges
+      ]);
+      layout(); refreshParentSelect(); save(cy);
+    }
+    mountModel(load() || demoData);
+
+    // ---- Левая панель (добавление)
+    const newName = document.getElementById('newName');
+    const newTitle = document.getElementById('newTitle');
+    const newParent = document.getElementById('newParent');
+    function refreshParentSelect(){
+      const items = [{id:'',name:'(нет)'}]; cy.nodes().forEach(n=>items.push({id:n.id(),name:n.data('name')||n.id()}));
+      newParent.innerHTML = items.map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
+      const parentSel = document.getElementById('propParent');
+      if(parentSel){
+        parentSel.innerHTML = items.map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
+      }
+    }
+    document.getElementById('createBtn').addEventListener('click', ()=>{
+      const name=(newName.value||'').trim(); if(!name){ alert('Введите имя'); return; }
+      const title=(newTitle.value||'').trim(); const parentId=newParent.value||null; const id=uid();
+      cy.add({ data:{ id, name, title }, classes: parentId? '' : 'root' });
+      if(parentId){ cy.add({ data:{ id:`e_${parentId}_${id}`, source:parentId, target:id }}); }
+      if(document.getElementById('layoutAfterAdd').classList.contains('active')) layout();
+      refreshParentSelect(); save(cy); newName.value=''; newTitle.value='';
+    });
+    document.getElementById('layoutAfterAdd').addEventListener('click', (e)=>{
+      e.currentTarget.classList.toggle('active');
+      e.currentTarget.textContent = e.currentTarget.classList.contains('active') ? 'Авто-раскладка: ВКЛ' : 'Авто-раскладка: ВЫКЛ';
+    });
+
+    // ---- Правая панель (свойства)
+    const nodePanel = document.getElementById('nodePanel');
+    function renderNodePanel(node){
+      if(!node){ nodePanel.innerHTML='<div class="hint">Кликните сотрудника на схеме.</div>'; return; }
+      const data=node.data();
+      const parent=node.incomers('edge').length? node.incomers('edge')[0].source().id() : '';
+      nodePanel.innerHTML = `
+        <label>Имя</label><input id="propName" value="${(data.name||'').replaceAll('"','&quot;')}"/>
+        <label>Должность</label><input id="propTitle" value="${(data.title||'').replaceAll('"','&quot;')}"/>
+        <label>Родитель (начальник)</label><select id="propParent"></select>
+        <div class="row" style="margin-top:10px">
+          <button id="applyBtn" class="btn success">Сохранить</button>
+          <button id="deleteBtn" class="btn warn">Удалить узел</button>
+        </div>
+        <button id="deleteSubtreeBtn" class="btn warn" style="margin-top:8px;width:100%">Удалить поддерево</button>
+        <div class="hint" style="margin-top:8px">Поддерево = узел и все его подчинённые.</div>`;
+      const sel=nodePanel.querySelector('#propParent');
+      const items=[{id:'',name:'(нет)'}]; cy.nodes().forEach(n=>items.push({id:n.id(),name:n.data('name')||n.id()}));
+      sel.innerHTML = items.map(o=>`<option value="${o.id}">${o.name}</option>`).join(''); sel.value = parent || '';
+
+      nodePanel.querySelector('#applyBtn').onclick=()=>{
+        const name=nodePanel.querySelector('#propName').value.trim();
+        const title=nodePanel.querySelector('#propTitle').value.trim();
+        const newParentId=nodePanel.querySelector('#propParent').value||null;
+        node.data({ ...node.data(), name, title });
+        if(newParentId){ node.removeClass('root'); } else { node.addClass('root'); }
+        const incoming=node.incomers('edge'); if(incoming.length){ incoming.remove(); }
+        if(newParentId){
+          if(hasCycleIfAddEdge(cy, newParentId, node.id())){ alert('Нельзя назначить родителя: образуется цикл.'); }
+          else{ cy.add({ data:{ id:`e_${newParentId}_${node.id()}`, source:newParentId, target:node.id() }}); }
+        }
+        layout(); refreshParentSelect(); save(cy);
+      };
+
+      nodePanel.querySelector('#deleteBtn').onclick=()=>{
+        if(!confirm('Удалить только выбранный узел? Его подчинённые поднимутся на верхний уровень.')) return;
+        const children=node.outgoers('edge').targets(); cy.remove(node.connectedEdges()); node.remove();
+        children.forEach(ch=>ch.addClass('root')); layout(); refreshParentSelect(); save(cy); renderNodePanel(null);
+      };
+
+      nodePanel.querySelector('#deleteSubtreeBtn').onclick=()=>{
+        if(!confirm('Удалить узел И все его подчинённые?')) return;
+        const subtree=node.union(node.successors()); cy.remove(subtree);
+        layout(); refreshParentSelect(); save(cy); renderNodePanel(null);
+      };
+    }
+    cy.on('tap','node',e=>renderNodePanel(e.target));
+    cy.on('tap',e=>{ if(e.target===cy) renderNodePanel(null); });
+    cy.on('dragfree','node',()=>save(cy));
+
+    // ---- Верхние кнопки
+    document.getElementById('addNodeBtn').onclick=()=>{ newName.focus(); newName.select(); };
+    document.getElementById('layoutBtn').onclick=layout;
+    document.getElementById('fitBtn').onclick=()=>cy.fit(undefined,30);
+    document.getElementById('exportJsonBtn').onclick=()=> {
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([JSON.stringify(modelFromCy(cy),null,2)],{type:'application/json'}));
+      a.download='orgchart.json'; a.click(); URL.revokeObjectURL(a.href);
+    };
+    document.getElementById('importJsonBtn').onclick=()=>{
+      const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json';
+      inp.onchange=async()=>{ const f=inp.files[0]; if(!f) return; try{ mountModel(JSON.parse(await f.text())); }catch(e){ alert('Ошибка JSON: '+e.message); } };
+      inp.click();
+    };
+    document.getElementById('exportPngBtn').onclick=()=>{
+      const png=cy.png({ full:true, scale:2, bg:'white' }); const a=document.createElement('a'); a.href=png; a.download='orgchart.png'; a.click();
+    };
+    document.getElementById('resetBtn').onclick=()=>{ if(!confirm('Сбросить к демо-структуре?')) return; localStorage.removeItem(STORAGE_KEY); mountModel(demoData); };
+
+    document.getElementById('quickExportBtn').onclick=async()=>{
+      const data=JSON.stringify(modelFromCy(cy),null,2);
+      try{ await navigator.clipboard.writeText(data); alert('JSON скопирован'); } catch{ /* no clipboard */ }
+    };
+    document.getElementById('quickImportBtn').onclick=async()=>{
+      const text=prompt('Вставьте JSON (массив узлов):'); if(!text) return;
+      try{ mountModel(JSON.parse(text)); }catch(e){ alert('Ошибка JSON: '+e.message); }
+    };
+
+    // ---- Инициализация edgehandles (без «Illegal return statement» и без падений)
+    let eh = null;
+    function tryInitEdgehandles(){
+      try{
+        if(typeof cy.edgehandles === 'function'){ return true; }
+        return false;
+      }catch(err){
+        console.warn('edgehandles init error', err);
+        return false;
+      }
+    }
+    const edgeToggle = document.getElementById('edgeMode');
+    const edgeModeLbl = document.getElementById('edgeModeLbl');
+    if(tryInitEdgehandles()){
+      eh = cy.edgehandles({
+        toggleOffOnLeave:true, handleSize:10, handleNodes:'node', handleColor:'#25c2a0',
+        edgeType:()=> 'flat', loopAllowed:()=> false,
+        complete:(sourceNode, targetNodes, addedEntities)=>{
+          const sId=sourceNode.id(); const t=targetNodes[0]; if(!t) return; const tId=t.id();
+          if(hasCycleIfAddEdge(cy, sId, tId)){ alert('Нельзя создать цикл.'); if(addedEntities && addedEntities.edges) addedEntities.edges.remove(); return; }
+          const incoming=t.incomers('edge'); if(incoming.length){ incoming.remove(); }
+          const e = addedEntities && addedEntities.edges && addedEntities.edges[0];
+          if(e){ e.data('id', `e_${sId}_${tId}`); } else { cy.add({ data:{ id:`e_${sId}_${tId}`, source:sId, target:tId }}); }
+          layout(); save(cy);
+        }
+      });
+      edgeToggle.disabled=false; edgeModeLbl.textContent='Режим стрелок';
+      edgeToggle.addEventListener('change', ()=>{ if(edgeToggle.checked) eh.enable(); else eh.disable(); });
+      eh.disable();
+    }else{
+      edgeToggle.disabled=true; edgeModeLbl.textContent='Режим стрелок (недоступен)';
+      edgeToggle.addEventListener('change', ()=>{ edgeToggle.checked=false; alert('Плагин стрелок не загрузился. Связи можно задать в правой панели.'); });
+    }
+
+    // ---- Клавиатура
+    window.addEventListener('keydown', (e)=>{
+      if(e.key==='L' || e.key==='л') layout();
+      if(e.key==='F' || e.key==='а') cy.fit(undefined,30);
+      if(e.key==='Delete'){
+        const sel=cy.$('node:selected'); if(sel.length && confirm('Удалить только выбранный узел?')){
+          const node=sel[0]; const children=node.outgoers('edge').targets();
+          cy.remove(node.connectedEdges()); node.remove(); children.forEach(ch=> ch.addClass('root'));
+          layout(); refreshParentSelect(); save(cy); renderNodePanel(null);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
