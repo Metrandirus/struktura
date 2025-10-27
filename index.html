@@ -49,6 +49,23 @@
       <div class="left">
         <strong>Оргструктура</strong>
         <span id="saveBadge" class="badge" style="margin-left:8px">Сохранено</span>
+        <div id="toolsInline" class="tools-inline" style="display:none;gap:8px;align-items:center;margin-left:12px">
+          <button id="autoLayoutBtn" class="btn small success">📐 Автовыравнивание</button>
+          <button id="addNodeBtn" class="btn small">➕ Сотрудник</button>
+          <button id="linkDrawBtn" class="btn small">🔗 Связать ячейки</button>
+          <button id="linkDeleteBtn" class="btn small warn">🧹 Удалить связь ячеек</button>
+          <button id="deleteNodeBtn" class="btn small warn">🗑️ Удалить узел</button>
+          <div class="palette" title="Заливка ячейки">
+            🎨
+            <button class="swatch" data-color="#101735" style="background:#101735"></button>
+            <button class="swatch" data-color="#1a2746" style="background:#1a2746"></button>
+            <button class="swatch" data-color="#263b7a" style="background:#263b7a"></button>
+            <button class="swatch" data-color="#204f4a" style="background:#204f4a"></button>
+            <button class="swatch" data-color="#5a2a2a" style="background:#5a2a2a"></button>
+            <button class="swatch" data-color="#4a2560" style="background:#4a2560"></button>
+          </div>
+          <span id="modeBadge" class="badge">Режим: выбор</span>
+        </div>
       </div>
       <div class="right">
         <button id="exportPngBtn" class="btn">🖼️ PNG</button>
@@ -59,21 +76,7 @@
     </div>
 
     <div class="stage-wrap" id="stageWrap">
-      <div class="toolbar" id="toolbar">
-        <button id="autoLayoutBtn" class="btn small success">📐 Автовыравнивание</button>
-        <button id="addNodeBtn" class="btn small">➕ Сотрудник</button>
-        <button id="linkDrawBtn" class="btn small">🔗 Связать ячейки</button>
-        <button id="linkDeleteBtn" class="btn small warn">🧹 Удалить связь ячеек</button>
-        <button id="deleteNodeBtn" class="btn small warn">🗑️ Удалить узел</button>
-        <div class="palette" title="Заливка ячейки">
-          🎨
-          <button class="swatch" data-color="#101735" style="background:#101735"></button>
-          <button class="swatch" data-color="#1a2746" style="background:#1a2746"></button>
-          <button class="swatch" data-color="#263b7a" style="background:#263b7a"></button>
-          <button class="swatch" data-color="#204f4a" style="background:#204f4a"></button>
-          <button class="swatch" data-color="#5a2a2a" style="background:#5a2a2a"></button>
-          <button class="swatch" data-color="#4a2560" style="background:#4a2560"></button>
-        </div>
+      
         <span id="modeBadge" class="badge">Режим: выбор</span>
       </div>
 
@@ -132,7 +135,7 @@
   const gEdges = document.getElementById('edges');
   const org = document.getElementById('org');
   const orgText = document.getElementById('orgText');
-  const toolbar = document.getElementById('toolbar');
+  const toolsInline = document.getElementById('toolsInline');
   const modeBadge = document.getElementById('modeBadge');
   const saveBadge = document.getElementById('saveBadge');
   const editBtn = document.getElementById('editBtn');
@@ -294,7 +297,7 @@
   function getSvgPoint(ev){ var pt=stage.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; return pt.matrixTransform(stage.getScreenCTM().inverse()); }
 
   // ===== Верхняя панель =====
-  editBtn.addEventListener('click', function(){ editMode=!editMode; toolbar.style.display=editMode?'flex':'none'; editBtn.textContent=editMode?'✅ Готово':'✏️ Редактирование'; linkMode=false; linkDeleteMode=false; cancelGhost(); modeBadge.textContent='Режим: выбор'; });
+  editBtn.addEventListener('click', function(){ editMode=!editMode; toolsInline.style.display=editMode?'flex':'none'; editBtn.textContent=editMode?'✅ Готово':'✏️ Редактирование'; linkMode=false; linkDeleteMode=false; cancelGhost(); modeBadge.textContent='Режим: выбор'; });
   exportPngBtn.addEventListener('click', exportPNG);
   exportJsonBtn.addEventListener('click', exportJSON);
   importJsonBtn.addEventListener('click', importJSON);
