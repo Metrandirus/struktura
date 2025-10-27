@@ -266,6 +266,13 @@ try { if (typeof window.cytoscapeEdgehandles !== 'undefined') { cytoscape.use(wi
         }
         if(typeof cytoscapeEdgehandles !== 'undefined') cytoscape.use(cytoscapeEdgehandles);
         return typeof cy.edgehandles === 'function';
+      }catch(err){
+        console.warn('edgehandles init error', err);
+        return false;
+      }
+    }
+        if(typeof cytoscapeEdgehandles !== 'undefined') cytoscape.use(cytoscapeEdgehandles);
+        return typeof cy.edgehandles === 'function';
       }catch(err){ console.warn('edgehandles init error', err); return false; }
     }
     if(tryInitEdgehandles()){
@@ -561,6 +568,23 @@ try { if (typeof window.cytoscapeEdgehandles !== 'undefined') { cytoscape.use(wi
       }
     });
 
+  // ---- Простые самотесты (не падают, только предупреждают в консоли)
+    (function selfTests(){
+      console.group('Orgchart self-tests');
+      try{
+        console.assert(typeof cytoscape === 'function', 'Cytoscape не загружен');
+        console.assert(cy && cy.nodes && typeof cy.nodes === 'function', 'cy не инициализирован');
+        const count = cy.nodes().length;
+        console.assert(count > 0, 'В демо-модели должны быть узлы');
+        const tmpId = 'tmp_'+Date.now();
+        cy.add({ data:{ id: tmpId, name:'TEST', title:'' }, classes:'root' });
+        console.assert(cy.getElementById(tmpId).length === 1, 'Временный узел добавлен');
+        cy.getElementById(tmpId).remove();
+        console.assert(cy.nodes().length === count, 'Временный узел удалён');
+        console.log('edgehandles доступен:', typeof cy.edgehandles === 'function');
+      }catch(e){ console.warn('Self-tests error:', e); }
+      console.groupEnd();
+    })();
   </script>
 </body>
 </html>
