@@ -160,7 +160,7 @@
   function uid(){ return 'n' + Math.random().toString(36).slice(2,9); }
   function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); showSaved(); }
   function load(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw? JSON.parse(raw):null; }catch(e){ return null; } }
-  function showSaved(){ /* скрыто: бейдж не показываем */ }
+  function showSaved(){}, 1200); }
 
   // Измерение ширины текста (для автоширины)
   var measCanvas = document.createElement('canvas');
@@ -300,11 +300,36 @@
   importJsonBtn.addEventListener('click', importJSON);
 
   // ===== Тулбар =====
-  addNodeBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} editingNodeId=null; openDialog('', ''); });
-  editNodeBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} if(!selectedNodeId){ alert('Сначала выберите ячейку.'); return;} var n=getNode(selectedNodeId); editingNodeId=n.id; openDialog(n.name||'', n.title||''); });
-  linkDrawBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} linkMode=!linkMode; linkDeleteMode=false; if(!linkMode) cancelGhost(); modeBadge.textContent = linkMode? 'Режим: связь' : 'Режим: выбор'; });
-  linkDeleteBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} linkDeleteMode=!linkDeleteMode; linkMode=false; cancelGhost(); modeBadge.textContent = linkDeleteMode? 'Удаление связи' : 'Режим: выбор'; });
-  deleteNodeBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} if(!selectedNodeId){ alert('Выберите узел.'); return;} if(!confirm('Удалить выбранный узел?')) return; removeNode(selectedNodeId); clearSelection(); draw(); save(); });
+  addNodeBtn.addEventListener('click', function(){
+    if(!editMode){ alert('Включите режим редактирования.'); return; }
+    editingNodeId=null;
+    openDialog('', '');
+  });
+  editNodeBtn.addEventListener('click', function(){
+    if(!editMode){ alert('Включите режим редактирования.'); return; }
+    if(!selectedNodeId){ alert('Сначала выберите ячейку.'); return; }
+    var n=getNode(selectedNodeId);
+    editingNodeId=n.id;
+    openDialog(n.name||'', n.title||'');
+  });
+  linkDrawBtn.addEventListener('click', function(){
+    if(!editMode){ alert('Включите режим редактирования.'); return; }
+    linkMode=!linkMode; linkDeleteMode=false;
+    if(!linkMode) cancelGhost();
+    modeBadge.textContent = linkMode? 'Режим: связь' : 'Режим: выбор';
+  });
+  linkDeleteBtn.addEventListener('click', function(){
+    if(!editMode){ alert('Включите режим редактирования.'); return; }
+    linkDeleteMode=!linkDeleteMode; linkMode=false; cancelGhost();
+    modeBadge.textContent = linkDeleteMode? 'Удаление связи' : 'Режим: выбор';
+  });
+  deleteNodeBtn.addEventListener('click', function(){
+    if(!editMode){ alert('Включите режим редактирования.'); return; }
+    if(!selectedNodeId){ alert('Выберите узел.'); return; }
+    if(!confirm('Удалить выбранный узел?')) return;
+    removeNode(selectedNodeId);
+    clearSelection(); draw(); save();
+  });
   autoLayoutBtn.addEventListener('click', autoLayout);
 
   // ===== Палитра заливки =====
