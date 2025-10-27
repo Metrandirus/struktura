@@ -51,6 +51,8 @@
       </div>
       <div class="right">
         <button id="exportPngBtn" class="btn">🖼️ PNG</button>
+        <button id="exportJsonBtn" class="btn">💾 Сохранить JSON</button>
+        <button id="importJsonBtn" class="btn">📂 Загрузить JSON</button>
         <button id="editBtn" class="btn primary">✏️ Редактирование</button>
       </div>
     </div>
@@ -87,7 +89,7 @@
           <text id="orgText" x="140" y="36" text-anchor="middle" style="font-weight:700;fill:#eaf0ff">Моя организация</text>
         </g>
       </svg>
-      <div class="hint">Редактирование: включите ✏️. «Связать ячейки»: клик по источнику → наведите и клик по цели (видна стрелка). «Удалить связь ячеек» — клик по линии. «Автовыравнивание» — по строкам.</div>
+      <div class="hint">Редактирование: включите ✏️. «Связать ячейки»: клик по источнику → наведите стрелку → клик по цели. Перетаскивание узлов таскает стрелки. «Сохранить/Загрузить JSON» — полный шаблон.</div>
     </div>
   </div>
 
@@ -107,7 +109,7 @@
 
   <script>
   // ===== Модель =====
-  const STORAGE_KEY = 'orgchart_svg_v4';
+  const STORAGE_KEY = 'orgchart_svg_v5';
   const state = load() || { orgName:'Моя организация', nodes:[], edges:[] };
 
   // ===== DOM =====
@@ -121,6 +123,8 @@
   const saveBadge = document.getElementById('saveBadge');
   const editBtn = document.getElementById('editBtn');
   const exportPngBtn = document.getElementById('exportPngBtn');
+  const exportJsonBtn = document.getElementById('exportJsonBtn');
+  const importJsonBtn = document.getElementById('importJsonBtn');
   const addNodeBtn = document.getElementById('addNodeBtn');
   const linkDrawBtn = document.getElementById('linkDrawBtn');
   const linkDeleteBtn = document.getElementById('linkDeleteBtn');
@@ -136,7 +140,7 @@
   // ===== Режимы =====
   let editMode=false, linkMode=false, linkDeleteMode=false;
   let selectedNodeId=null, linkSourceId=null, editingNodeId=null;
-  let drag=null, ghost=null; // линия-призрак при связывании
+  let drag=null, ghost=null; // стрелка-призрак при связывании
 
   // ===== Утилиты =====
   function uid(){ return 'n' + Math.random().toString(36).slice(2,9); }
@@ -144,7 +148,7 @@
   function load(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw? JSON.parse(raw):null; }catch(e){ return null; } }
   function showSaved(){ saveBadge.textContent = 'Сохранено'; setTimeout(()=> saveBadge.textContent=' ', 1200); }
 
-  // Измерение ширины текста (для автоширины узла)
+  // Измерение ширины текста
   const meas = (()=>{ const c=document.createElement('canvas'); const ctx=c.getContext('2d'); return (text, font)=>{ ctx.font=font; return Math.ceil(ctx.measureText(text||'').width); }; })();
   const NAME_FONT = "700 16px system-ui,-apple-system,Segoe UI,Roboto,Arial";
   const TITLE_FONT = "12px system-ui,-apple-system,Segoe UI,Roboto,Arial";
@@ -158,7 +162,7 @@
     return {w,h};
   }
   function getNode(id){ return state.nodes.find(n=>n.id===id); }
-  function removeNode(id){ state.nodes = state.nodes.filter(n=>n.id!==id); state.edges = state.edges.filter(e=>e.from!==id && e.to!==id); }
+  function removeNode(id){ state.nodes = state.nodes.filter(n=>n.id!==id); state.edges = state.edges.filter(e=> e.from!==id && e.to!==id); }
   function edgeExists(from,to){ return state.edges.some(e=>e.from===from && e.to===to); }
   function wouldCycle(sourceId, targetId){
     const parentsOf = new Map(); state.edges.forEach(e=>{ const a=parentsOf.get(e.to)||[]; a.push(e.from); parentsOf.set(e.to,a); });
@@ -204,7 +208,7 @@
   }
 
   function svgEl(tag, attrs){ const el=document.createElementNS('http://www.w3.org/2000/svg', tag); for(const k in attrs){ el.setAttribute(k, attrs[k]); } return el; }
-  function updateEdgesNear(){ // обновляем все рёбра (надёжно и просто)
+  function updateEdgesAll(){ // пересчитать все рёбра от текущих позиций
     const lines=gEdges.querySelectorAll('line');
     lines.forEach(line=>{ const e=state.edges.find(x=>x.id===line.dataset.id); if(!e) return; const s=getNode(e.from), t=getNode(e.to); if(!s||!t) return; line.setAttribute('x1', s.x+s.w/2); line.setAttribute('y1', s.y+s.h/2); line.setAttribute('x2', t.x+t.w/2); line.setAttribute('y2', t.y+t.h/2); });
   }
@@ -228,29 +232,36 @@
     if(!drag) return; const n=getNode(drag.id); if(!n) return; const pt=getSvgPoint(ev);
     n.x=pt.x-drag.dx; n.y=pt.y-drag.dy;
     const g=[...gNodes.children].find(x=>x.dataset.id===n.id); if(g){ g.setAttribute('transform',`translate(${n.x},${n.y})`);} 
-    updateEdgesNear(); // тянем все стрелки вслед за узлом
+    updateEdgesAll(); // подтягиваем все стрелки
     if(ghost) updateGhostTo(ev);
   }
   function nodePointerUp(){ drag=null; save(); }
   function nodeDblClick(ev){ if(!editMode) return; const id=ev.currentTarget.dataset.id; const n=getNode(id); editingNodeId=id; openDialog(n.name||'', n.title||''); }
 
   // ===== Связи (стрелка-призрак) =====
-  function startGhostFrom(nodeId){ const n=getNode(nodeId); linkSourceId=nodeId; modeBadge.textContent='Выберите целевую ячейку…'; const x=n.x+n.w/2,y=n.y+n.h/2; ghost=svgEl('line',{x1:x,y1:y,x2:x,y2:y, class:'edge', 'marker-end':'url(#arrow)', stroke:'#3a9ad9','stroke-width':2}); gEdges.appendChild(ghost); stage.addEventListener('pointermove', updateGhostTo); }
-  function updateGhostTo(ev){ if(!ghost) return; const pt=getSvgPoint(ev); ghost.setAttribute('x2',pt.x); ghost.setAttribute('y2',pt.y); }
-  function cancelGhost(){ if(ghost){ ghost.remove(); ghost=null; } linkSourceId=null; stage.removeEventListener('pointermove', updateGhostTo); }
-
-  function nodeClick(ev){
-    ev.stopPropagation(); if(!editMode) return; const id=ev.currentTarget.dataset.id;
-    if(linkMode){
-      if(!linkSourceId){ startGhostFrom(id); selectNode(id); return; }
-      if(linkSourceId===id){ cancelGhost(); modeBadge.textContent='Режим: связь'; return; }
-      if(edgeExists(linkSourceId,id)){ alert('Такая связь уже есть.'); cancelGhost(); modeBadge.textContent='Режим: связь'; return; }
-      if(wouldCycle(linkSourceId,id)){ alert('Нельзя создать цикл.'); cancelGhost(); modeBadge.textContent='Режим: связь'; return; }
-      state.edges.push({ id:'e_'+uid(), from:linkSourceId, to:id }); cancelGhost(); draw(); save(); modeBadge.textContent='Режим: связь';
-    } else {
-      selectNode(id);
-    }
+  function startGhostFrom(nodeId){
+    const n=getNode(nodeId); linkSourceId=nodeId; modeBadge.textContent='Выберите целевую ячейку…';
+    const x=n.x+n.w/2,y=n.y+n.h/2; ghost=svgEl('line',{x1:x,y1:y,x2:x,y2:y, class:'edge', 'marker-end':'url(#arrow)', stroke:'#3a9ad9','stroke-width':2});
+    gEdges.appendChild(ghost);
+    window.addEventListener('pointermove', updateGhostTo);
+    window.addEventListener('pointerup', ghostPointerUp, {once:true});
   }
+  function updateGhostTo(ev){ if(!ghost) return; const pt=getSvgPoint(ev); ghost.setAttribute('x2',pt.x); ghost.setAttribute('y2',pt.y); }
+  function ghostPointerUp(ev){
+    if(!ghost) return; // попытка завершить
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    const g = el && el.closest ? el.closest('g.node') : null;
+    if(g){ const targetId = g.dataset.id; if(targetId!==linkSourceId){
+        if(edgeExists(linkSourceId,targetId)) { alert('Такая связь уже есть.'); }
+        else if(wouldCycle(linkSourceId,targetId)) { alert('Нельзя создать цикл.'); }
+        else { state.edges.push({ id:'e_'+uid(), from:linkSourceId, to:targetId }); draw(); save(); }
+      }
+    }
+    cancelGhost();
+  }
+  function cancelGhost(){ if(ghost){ ghost.remove(); ghost=null; } linkSourceId=null; window.removeEventListener('pointermove', updateGhostTo); }
+
+  function nodeClick(ev){ if(!editMode) return; ev.stopPropagation(); const id=ev.currentTarget.dataset.id; if(linkMode){ /* всё завершает ghostPointerUp */ } else { selectNode(id); } }
 
   function edgeClick(ev){ if(!editMode) return; ev.stopPropagation(); if(linkDeleteMode){ const id=ev.currentTarget.dataset.id; state.edges = state.edges.filter(e=>e.id!==id); draw(); save(); } else { const sel=gEdges.querySelector('.edge.selected'); if(sel && sel!==ev.currentTarget) sel.classList.remove('selected'); ev.currentTarget.classList.toggle('selected'); } }
 
@@ -259,6 +270,8 @@
   // ===== Верхняя панель =====
   editBtn.addEventListener('click', ()=>{ editMode=!editMode; toolbar.style.display=editMode?'flex':'none'; editBtn.textContent=editMode?'✅ Готово':'✏️ Редактирование'; linkMode=false; linkDeleteMode=false; cancelGhost(); modeBadge.textContent='Режим: выбор'; });
   exportPngBtn.addEventListener('click', exportPNG);
+  exportJsonBtn.addEventListener('click', exportJSON);
+  importJsonBtn.addEventListener('click', importJSON);
 
   // ===== Тулбар =====
   addNodeBtn.addEventListener('click', ()=>{ if(!editMode){ alert('Включите режим редактирования.'); return;} editingNodeId=null; openDialog('', ''); });
@@ -305,15 +318,35 @@
     draw(); save();
   }
 
+  // ===== Экспорт / Импорт JSON =====
+  function exportJSON(){
+    const data = { orgName: state.orgName, nodes: state.nodes, edges: state.edges };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orgchart.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  }
+  function importJSON(){
+    const inp = document.createElement('input'); inp.type='file'; inp.accept='application/json';
+    inp.onchange = async ()=>{
+      const f = inp.files[0]; if(!f) return; try{
+        const obj = JSON.parse(await f.text());
+        if(!obj || !Array.isArray(obj.nodes) || !Array.isArray(obj.edges)) throw new Error('Неверный формат');
+        state.orgName = obj.orgName || 'Организация';
+        state.nodes = obj.nodes.map(n=>({ id:n.id||uid(), name:n.name||'', title:n.title||'', x:+n.x||0, y:+n.y||0, w:+n.w||160, h:+n.h||40, fill:n.fill||'#101735' }));
+        state.edges = obj.edges.map(e=>({ id:e.id||('e_'+uid()), from:e.from, to:e.to })).filter(e=> e.from && e.to);
+        draw(); save();
+      }catch(err){ alert('Ошибка чтения JSON: '+err.message); }
+    };
+    inp.click();
+  }
+
   // ===== Прочее =====
   org.addEventListener('click', ()=>{ if(!editMode) return; const v=prompt('Название организации:', state.orgName||''); if(v!=null){ state.orgName=v.trim()||'Организация'; draw(); save(); } });
-  stage.addEventListener('click', ()=>{ if(!editMode) return; clearSelection(); const es=gEdges.querySelector('.edge.selected'); if(es) es.classList.remove('selected'); });
+  stage.addEventListener('click', ()=>{ if(!editMode) return; clearSelection(); if(linkMode && ghost){ cancelGhost(); modeBadge.textContent='Режим: связь'; } const es=gEdges.querySelector('.edge.selected'); if(es) es.classList.remove('selected'); });
   window.addEventListener('keydown', (e)=>{ if(!editMode) return; if(e.key==='Delete'){ deleteNodeBtn.click(); } });
 
-  // ===== Экспорт PNG (инлайн-стили, чтобы текст точно попал) =====
+  // ===== Экспорт PNG (инлайн-стили) =====
   function exportPNG(){
     const bbox=stage.getBBox(); const margin=24; const w=Math.max(600, bbox.width+margin*2); const h=Math.max(300, bbox.height+margin*2);
-    // Клонируем и НИЧЕГО не полагаемся на CSS — все ключевые атрибуты уже инлайн у узлов/текста/линий
     const clone=stage.cloneNode(true); clone.setAttribute('viewBox', `${bbox.x-margin} ${bbox.y-margin} ${w} ${h}`); clone.setAttribute('width',w); clone.setAttribute('height',h); clone.setAttribute('style','background:#ffffff');
     const svgData=new XMLSerializer().serializeToString(clone); const svgBlob=new Blob([svgData],{type:'image/svg+xml;charset=utf-8'}); const url=URL.createObjectURL(svgBlob);
     const img=new Image(); img.onload=()=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; const ctx=c.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0); URL.revokeObjectURL(url); c.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='orgchart.png'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); },'image/png'); }; img.src=url;
