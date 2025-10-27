@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Оргструктура — редактор</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='20' rx='4' fill='%231e2a5a' stroke='%234a64d8'/%3E%3C/svg%3E">
   <style>
     :root{
       --bg:#0f1220; --panel:#171a2b; --panel-2:#0d1020; --text:#eaf0ff; --muted:#9aa3b2; --border:#232947; --accent:#7aa2ff; --danger:#ff6b6b;
@@ -89,7 +90,7 @@
           <text id="orgText" x="140" y="36" text-anchor="middle" style="font-weight:700;fill:#eaf0ff">Моя организация</text>
         </g>
       </svg>
-      <div class="hint">Редактирование: включите ✏️. «Связать ячейки»: клик по источнику → наведите стрелку → клик по цели. Перетаскивание узлов таскает стрелки. «Сохранить/Загрузить JSON» — полный шаблон.</div>
+      <div class="hint">Редактирование: включите ✏️. «Связать ячейки»: клик по источнику → наведите стрелку → отпустите на цели. Перетаскивание узлов тянет стрелки. «Сохранить/Загрузить JSON» — весь шаблон.</div>
     </div>
   </div>
 
@@ -109,10 +110,10 @@
 
   <script>
   // ===== Модель =====
-  const STORAGE_KEY = 'orgchart_svg_v5';
+  const STORAGE_KEY = 'orgchart_svg_v6';
   const state = load() || { orgName:'Моя организация', nodes:[], edges:[] };
 
-  // --- Polyfills for older SVG (GitHub Pages browsers) ---
+  // --- Polyfills для совместимости (GitHub Pages/старые движки) ---
   (function(){
     if(!Element.prototype.matches){
       Element.prototype.matches = Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector || function(s){
@@ -148,39 +149,41 @@
   const inpTitle = document.getElementById('inpTitle');
   const dlgSave = document.getElementById('dlgSave');
   const dlgCancel = document.getElementById('dlgCancel');
-  const palette = [...document.querySelectorAll('.swatch')];
+  const palette = Array.from(document.querySelectorAll('.swatch'));
 
   // ===== Режимы =====
   let editMode=false, linkMode=false, linkDeleteMode=false;
   let selectedNodeId=null, linkSourceId=null, editingNodeId=null;
-  let drag=null, ghost=null; // стрелка-призрак при связывании
+  let drag=null, ghost=null; // стрелка-призрак
 
   // ===== Утилиты =====
   function uid(){ return 'n' + Math.random().toString(36).slice(2,9); }
   function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); showSaved(); }
   function load(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw? JSON.parse(raw):null; }catch(e){ return null; } }
-  function showSaved(){ saveBadge.textContent = 'Сохранено'; setTimeout(()=> saveBadge.textContent=' ', 1200); }
+  function showSaved(){ saveBadge.textContent = 'Сохранено'; setTimeout(function(){ saveBadge.textContent=' '; }, 1200); }
 
-  // Измерение ширины текста
-  const meas = (()=>{ const c=document.createElement('canvas'); const ctx=c.getContext('2d'); return (text, font)=>{ ctx.font=font; return Math.ceil(ctx.measureText(text||'').width); }; })();
-  const NAME_FONT = "700 16px system-ui,-apple-system,Segoe UI,Roboto,Arial";
-  const TITLE_FONT = "12px system-ui,-apple-system,Segoe UI,Roboto,Arial";
-  const PADX=14, PADY=10, GAP=6, NAME_H=18, TITLE_H=14;
+  // Измерение ширины текста (для автоширины)
+  var measCanvas = document.createElement('canvas');
+  var measCtx = measCanvas.getContext('2d');
+  function measure(text, font){ measCtx.font = font; return Math.ceil(measCtx.measureText(text||'').width); }
+  var NAME_FONT = "700 16px system-ui,-apple-system,Segoe UI,Roboto,Arial";
+  var TITLE_FONT = "12px system-ui,-apple-system,Segoe UI,Roboto,Arial";
+  var PADX=14, PADY=10, GAP=6, NAME_H=18, TITLE_H=14;
 
   function computeNodeSize(name, title){
-    const nameW = Math.max( meas(name||'', NAME_FONT), 80 );
-    const titleW = Math.max( meas(title||'', TITLE_FONT), 60 );
-    const w = Math.max(160, nameW + PADX*2, title ? (titleW + PADX*2) : 0);
-    const h = PADY + NAME_H + (title? (GAP + TITLE_H) : 0) + PADY;
-    return {w,h};
+    var nameW = Math.max( measure(name||'', NAME_FONT), 80 );
+    var titleW = Math.max( measure(title||'', TITLE_FONT), 60 );
+    var w = Math.max(160, nameW + PADX*2, title ? (titleW + PADX*2) : 0);
+    var h = PADY + NAME_H + (title? (GAP + TITLE_H) : 0) + PADY;
+    return {w:w, h:h};
   }
-  function getNode(id){ return state.nodes.find(n=>n.id===id); }
-  function removeNode(id){ state.nodes = state.nodes.filter(n=>n.id!==id); state.edges = state.edges.filter(e=> e.from!==id && e.to!==id); }
-  function edgeExists(from,to){ return state.edges.some(e=>e.from===from && e.to===to); }
+  function getNode(id){ return state.nodes.find(function(n){ return n.id===id; }); }
+  function removeNode(id){ state.nodes = state.nodes.filter(function(n){ return n.id!==id; }); state.edges = state.edges.filter(function(e){ return e.from!==id && e.to!==id; }); }
+  function edgeExists(from,to){ return state.edges.some(function(e){ return e.from===from && e.to===to; }); }
   function wouldCycle(sourceId, targetId){
-    const parentsOf = new Map(); state.edges.forEach(e=>{ const a=parentsOf.get(e.to)||[]; a.push(e.from); parentsOf.set(e.to,a); });
-    const stack=[sourceId]; const seen=new Set();
-    while(stack.length){ const cur=stack.pop(); if(seen.has(cur)) continue; seen.add(cur); if(cur===targetId) return true; const ps=parentsOf.get(cur)||[]; stack.push(...ps); }
+    var parentsOf = new Map(); state.edges.forEach(function(e){ var a=parentsOf.get(e.to)||[]; a.push(e.from); parentsOf.set(e.to,a); });
+    var stack=[sourceId]; var seen=new Set();
+    while(stack.length){ var cur=stack.pop(); if(seen.has(cur)) continue; seen.add(cur); if(cur===targetId) return true; var ps=parentsOf.get(cur)||[]; ps.forEach(function(p){ stack.push(p); }); }
     return false;
   }
 
@@ -189,94 +192,93 @@
     orgText.textContent = state.orgName || 'Организация';
 
     gNodes.innerHTML = '';
-    for(const n of state.nodes){
-      if(!n.w||!n.h){ const s=computeNodeSize(n.name,n.title); n.w=s.w; n.h=s.h; }
-      const fill = n.fill || '#101735';
-      const g=svgEl('g', {class:'node', transform:`translate(${n.x},${n.y})`}); g.dataset.id=n.id;
-      const border=svgEl('rect', {class:'border', x:0, y:0, width:n.w, height:n.h, rx:12, ry:12, fill:fill, stroke:'#2d3a70', 'stroke-width':2});
-      const nameT=svgEl('text', {x:n.w/2, y:PADY, 'text-anchor':'middle', 'dominant-baseline':'hanging', fill:'#eaf0ff', 'font-weight':'700', 'font-size':'16px', 'font-family':'system-ui,-apple-system,Segoe UI,Roboto,Arial'});
+    state.nodes.forEach(function(n){
+      if(!n.w||!n.h){ var s=computeNodeSize(n.name,n.title); n.w=s.w; n.h=s.h; }
+      var fill = n.fill || '#101735';
+      var g=svgEl('g', {class:'node', transform:'translate('+n.x+','+n.y+')'}); g.dataset.id=n.id;
+      var border=svgEl('rect', {class:'border', x:0, y:0, width:n.w, height:n.h, rx:12, ry:12, fill:fill, stroke:'#2d3a70', 'stroke-width':2});
+      var nameT=svgEl('text', {x:n.w/2, y:PADY, 'text-anchor':'middle', 'dominant-baseline':'hanging', fill:'#eaf0ff', 'font-weight':'700', 'font-size':'16px', 'font-family':'system-ui,-apple-system,Segoe UI,Roboto,Arial'});
       nameT.textContent = n.name || '';
-      g.append(border, nameT);
+      g.appendChild(border); g.appendChild(nameT);
       if(n.title){
-        const titleY = n.h - PADY;
-        const titleT=svgEl('text', {x:n.w/2, y:titleY, 'text-anchor':'middle', fill:'#c8d0ee', 'font-size':'12px', 'font-family':'system-ui,-apple-system,Segoe UI,Roboto,Arial'});
+        var titleY = n.h - PADY;
+        var titleT=svgEl('text', {x:n.w/2, y:titleY, 'text-anchor':'middle', fill:'#c8d0ee', 'font-size':'12px', 'font-family':'system-ui,-apple-system,Segoe UI,Roboto,Arial'});
         titleT.textContent = n.title || '';
         g.appendChild(titleT);
       }
       g.addEventListener('pointerdown', nodePointerDown);
+      g.addEventListener('mousedown', nodePointerDown);
       g.addEventListener('click', nodeClick);
       g.addEventListener('dblclick', nodeDblClick);
       gNodes.appendChild(g);
-    }
+    });
 
     gEdges.innerHTML='';
-    for(const e of state.edges){
-      const a=getNode(e.from), b=getNode(e.to); if(!a||!b) continue;
-      const x1=a.x + a.w/2, y1=a.y + a.h/2; const x2=b.x + b.w/2, y2=b.y + b.h/2;
-      const line=svgEl('line', {x1, y1, x2, y2, class:'edge', 'marker-end':'url(#arrow)', stroke:'#3a9ad9', 'stroke-width':2});
+    state.edges.forEach(function(e){
+      var a=getNode(e.from), b=getNode(e.to); if(!a||!b) return;
+      var x1=a.x + a.w/2, y1=a.y + a.h/2; var x2=b.x + b.w/2, y2=b.y + b.h/2;
+      var line=svgEl('line', {x1:x1, y1:y1, x2:x2, y2:y2, class:'edge', 'marker-end':'url(#arrow)', stroke:'#3a9ad9', 'stroke-width':2});
       line.dataset.id=e.id;
       line.addEventListener('click', edgeClick);
       gEdges.appendChild(line);
-    }
+    });
   }
 
-  function svgEl(tag, attrs){ const el=document.createElementNS('http://www.w3.org/2000/svg', tag); for(const k in attrs){ el.setAttribute(k, attrs[k]); } return el; }
+  function svgEl(tag, attrs){ var el=document.createElementNS('http://www.w3.org/2000/svg', tag); for(var k in attrs){ if(Object.prototype.hasOwnProperty.call(attrs,k)) el.setAttribute(k, attrs[k]); } return el; }
   function updateEdgesAll(){
-    // Полный пересчёт всех рёбер — надёжно, без пропусков
-    const lines=gEdges.querySelectorAll('line');
-    lines.forEach(line=>{
-      const e=state.edges.find(x=>x.id===line.dataset.id); if(!e) return;
-      const s=getNode(e.from), t=getNode(e.to); if(!s||!t) return;
+    var lines=gEdges.querySelectorAll('line');
+    lines.forEach(function(line){
+      var e=state.edges.find(function(x){ return x.id===line.dataset.id; }); if(!e) return;
+      var s=getNode(e.from), t=getNode(e.to); if(!s||!t) return;
       line.setAttribute('x1', s.x + s.w/2);
       line.setAttribute('y1', s.y + s.h/2);
       line.setAttribute('x2', t.x + t.w/2);
       line.setAttribute('y2', t.y + t.h/2);
       line.setAttribute('marker-end','url(#arrow)');
     });
-  });
   }
 
   // ===== Выделение =====
-  function clearSelection(){ selectedNodeId=null; const sel=stage.querySelector('.node.selected'); if(sel) sel.classList.remove('selected'); gEdges.querySelectorAll('.edge.selected').forEach(e=>e.classList.remove('selected')); }
-  function selectNode(id){ clearSelection(); selectedNodeId=id; const g=[...gNodes.children].find(x=>x.dataset.id===id); if(g) g.classList.add('selected'); }
+  function clearSelection(){ selectedNodeId=null; var sel=stage.querySelector('.node.selected'); if(sel) sel.classList.remove('selected'); gEdges.querySelectorAll('.edge.selected').forEach(function(e){ e.classList.remove('selected'); }); }
+  function selectNode(id){ clearSelection(); selectedNodeId=id; var g=Array.from(gNodes.children).find(function(x){ return x.dataset.id===id; }); if(g) g.classList.add('selected'); }
 
   // ===== Узел: drag / dblclick =====
   function nodePointerDown(ev){
     if(!editMode) return;
-    const g=ev.currentTarget; const id=g.dataset.id; selectNode(id);
-    const n=getNode(id); const pt=getSvgPoint(ev);
+    var g=ev.currentTarget; var id=g.dataset.id; selectNode(id);
+    var n=getNode(id); var pt=getSvgPoint(ev);
     if(linkMode){ startGhostFrom(id); return; }
-    // перетаскивание
-    drag={id, dx:pt.x-n.x, dy:pt.y-n.y};
+    drag={id:id, dx:pt.x-n.x, dy:pt.y-n.y};
     window.addEventListener('pointermove', nodePointerMove);
     window.addEventListener('mousemove', nodePointerMove);
     window.addEventListener('pointerup', nodePointerUp, {once:true});
+    window.addEventListener('mouseup', nodePointerUp, {once:true});
   }
   function nodePointerMove(ev){
-    if(!drag) return; const n=getNode(drag.id); if(!n) return; const pt=getSvgPoint(ev);
+    if(!drag) return; var n=getNode(drag.id); if(!n) return; var pt=getSvgPoint(ev);
     n.x=pt.x-drag.dx; n.y=pt.y-drag.dy;
-    const g=[...gNodes.children].find(x=>x.dataset.id===n.id); if(g){ g.setAttribute('transform',`translate(${n.x},${n.y})`);} 
-    updateEdgesAll(); // подтягиваем все стрелки
-    if(ghost) updateGhostTo(ev);
+    var g=Array.from(gNodes.children).find(function(x){ return x.dataset.id===n.id; }); if(g){ g.setAttribute('transform','translate('+n.x+','+n.y+')'); }
+    updateEdgesAll(); if(ghost) updateGhostTo(ev);
   }
-  function nodePointerUp(){ drag=null; save(); window.removeEventListener('mousemove', nodePointerMove); }
-  function nodeDblClick(ev){ if(!editMode) return; const id=ev.currentTarget.dataset.id; const n=getNode(id); editingNodeId=id; openDialog(n.name||'', n.title||''); }
+  function nodePointerUp(){ drag=null; save(); window.removeEventListener('mousemove', nodePointerMove); window.removeEventListener('pointermove', nodePointerMove); }
+  function nodeDblClick(ev){ if(!editMode) return; var id=ev.currentTarget.dataset.id; var n=getNode(id); editingNodeId=id; openDialog(n.name||'', n.title||''); }
 
   // ===== Связи (стрелка-призрак) =====
   function startGhostFrom(nodeId){
-    const n=getNode(nodeId); linkSourceId=nodeId; modeBadge.textContent='Выберите целевую ячейку…';
-    const x=n.x+n.w/2,y=n.y+n.h/2; ghost=svgEl('line',{x1:x,y1:y,x2:x,y2:y, class:'edge', 'marker-end':'url(#arrow)', stroke:'#3a9ad9','stroke-width':2, 'pointer-events':'none'});
+    var n=getNode(nodeId); linkSourceId=nodeId; modeBadge.textContent='Выберите целевую ячейку…';
+    var x=n.x+n.w/2, y=n.y+n.h/2; ghost=svgEl('line',{x1:x,y1:y,x2:x,y2:y, class:'edge', 'marker-end':'url(#arrow)', stroke:'#3a9ad9','stroke-width':2, 'pointer-events':'none'});
     gEdges.appendChild(ghost);
     window.addEventListener('pointermove', updateGhostTo);
+    window.addEventListener('mousemove', updateGhostTo);
     window.addEventListener('pointerup', ghostPointerUp, {once:true});
     window.addEventListener('mouseup', ghostPointerUp, {once:true});
   }
-  function updateGhostTo(ev){ if(!ghost) return; const pt=getSvgPoint(ev); ghost.setAttribute('x2',pt.x); ghost.setAttribute('y2',pt.y); }
+  function updateGhostTo(ev){ if(!ghost) return; var pt=getSvgPoint(ev); ghost.setAttribute('x2',pt.x); ghost.setAttribute('y2',pt.y); }
   function ghostPointerUp(ev){
-    if(!ghost) return; // попытка завершить
-    const el = document.elementFromPoint(ev.clientX, ev.clientY);
-    const g = el && el.closest ? el.closest('g.node') : null;
-    if(g){ const targetId = g.dataset.id; if(targetId!==linkSourceId){
+    if(!ghost) return;
+    var el = document.elementFromPoint(ev.clientX, ev.clientY);
+    var g = el && el.closest ? el.closest('g.node') : null;
+    if(g){ var targetId = g.dataset.id; if(targetId!==linkSourceId){
         if(edgeExists(linkSourceId,targetId)) { alert('Такая связь уже есть.'); }
         else if(wouldCycle(linkSourceId,targetId)) { alert('Нельзя создать цикл.'); }
         else { state.edges.push({ id:'e_'+uid(), from:linkSourceId, to:targetId }); draw(); save(); }
@@ -284,100 +286,97 @@
     }
     cancelGhost();
   }
-  function cancelGhost(){ if(ghost){ ghost.remove(); ghost=null; } linkSourceId=null; window.removeEventListener('pointermove', updateGhostTo); }
+  function cancelGhost(){ if(ghost){ ghost.remove(); ghost=null; } linkSourceId=null; window.removeEventListener('pointermove', updateGhostTo); window.removeEventListener('mousemove', updateGhostTo); }
 
-  function nodeClick(ev){ if(!editMode) return; ev.stopPropagation(); const id=ev.currentTarget.dataset.id; if(linkMode){ /* всё завершает ghostPointerUp */ } else { selectNode(id); } }
+  function nodeClick(ev){ if(!editMode) return; ev.stopPropagation(); if(!linkMode){ var id=ev.currentTarget.dataset.id; selectNode(id); } }
+  function edgeClick(ev){ if(!editMode) return; ev.stopPropagation(); if(linkDeleteMode){ var id=ev.currentTarget.dataset.id; state.edges = state.edges.filter(function(e){ return e.id!==id; }); draw(); save(); } else { var sel=gEdges.querySelector('.edge.selected'); if(sel && sel!==ev.currentTarget) sel.classList.remove('selected'); ev.currentTarget.classList.toggle('selected'); } }
 
-  function edgeClick(ev){ if(!editMode) return; ev.stopPropagation(); if(linkDeleteMode){ const id=ev.currentTarget.dataset.id; state.edges = state.edges.filter(e=>e.id!==id); draw(); save(); } else { const sel=gEdges.querySelector('.edge.selected'); if(sel && sel!==ev.currentTarget) sel.classList.remove('selected'); ev.currentTarget.classList.toggle('selected'); } }
-
-  function getSvgPoint(ev){ const pt=stage.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; return pt.matrixTransform(stage.getScreenCTM().inverse()); }
+  function getSvgPoint(ev){ var pt=stage.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; return pt.matrixTransform(stage.getScreenCTM().inverse()); }
 
   // ===== Верхняя панель =====
-  editBtn.addEventListener('click', ()=>{ editMode=!editMode; toolbar.style.display=editMode?'flex':'none'; editBtn.textContent=editMode?'✅ Готово':'✏️ Редактирование'; linkMode=false; linkDeleteMode=false; cancelGhost(); modeBadge.textContent='Режим: выбор'; });
+  editBtn.addEventListener('click', function(){ editMode=!editMode; toolbar.style.display=editMode?'flex':'none'; editBtn.textContent=editMode?'✅ Готово':'✏️ Редактирование'; linkMode=false; linkDeleteMode=false; cancelGhost(); modeBadge.textContent='Режим: выбор'; });
   exportPngBtn.addEventListener('click', exportPNG);
   exportJsonBtn.addEventListener('click', exportJSON);
   importJsonBtn.addEventListener('click', importJSON);
 
   // ===== Тулбар =====
-  addNodeBtn.addEventListener('click', ()=>{ if(!editMode){ alert('Включите режим редактирования.'); return;} editingNodeId=null; openDialog('', ''); });
-  linkDrawBtn.addEventListener('click', ()=>{ if(!editMode){ alert('Включите режим редактирования.'); return;} linkMode=!linkMode; linkDeleteMode=false; if(!linkMode) cancelGhost(); modeBadge.textContent = linkMode? 'Режим: связь' : 'Режим: выбор'; });
-  linkDeleteBtn.addEventListener('click', ()=>{ if(!editMode){ alert('Включите режим редактирования.'); return;} linkDeleteMode=!linkDeleteMode; linkMode=false; cancelGhost(); modeBadge.textContent = linkDeleteMode? 'Удаление связи' : 'Режим: выбор'; });
-  deleteNodeBtn.addEventListener('click', ()=>{ if(!editMode){ alert('Включите режим редактирования.'); return;} if(!selectedNodeId){ alert('Выберите узел.'); return;} if(!confirm('Удалить выбранный узел?')) return; removeNode(selectedNodeId); clearSelection(); draw(); save(); });
+  addNodeBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} editingNodeId=null; openDialog('', ''); });
+  linkDrawBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} linkMode=!linkMode; linkDeleteMode=false; if(!linkMode) cancelGhost(); modeBadge.textContent = linkMode? 'Режим: связь' : 'Режим: выбор'; });
+  linkDeleteBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} linkDeleteMode=!linkDeleteMode; linkMode=false; cancelGhost(); modeBadge.textContent = linkDeleteMode? 'Удаление связи' : 'Режим: выбор'; });
+  deleteNodeBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} if(!selectedNodeId){ alert('Выберите узел.'); return;} if(!confirm('Удалить выбранный узел?')) return; removeNode(selectedNodeId); clearSelection(); draw(); save(); });
   autoLayoutBtn.addEventListener('click', autoLayout);
 
   // ===== Палитра заливки =====
-  palette.forEach(btn=> btn.addEventListener('click', ()=>{
-    if(!editMode){ alert('Включите режим редактирования.'); return; }
-    if(!selectedNodeId){ alert('Сначала выберите ячейку (клик по сотруднику).'); return; }
-    const color = btn.dataset.color; const n=getNode(selectedNodeId); n.fill = color; draw(); save();
-  }));
+  palette.forEach(function(btn){ btn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return; } if(!selectedNodeId){ alert('Сначала выберите ячейку.'); return; } var color = btn.dataset.color; var n=getNode(selectedNodeId); n.fill = color; draw(); save(); }); });
 
   // ===== Диалог =====
   function openDialog(name,title){ dialog.style.display='flex'; inpName.value=name||''; inpTitle.value=title||''; inpName.focus(); }
-  dlgCancel.addEventListener('click', ()=> dialog.style.display='none');
-  dlgSave.addEventListener('click', ()=>{
-    const name=inpName.value.trim(); if(!name){ alert('Введите ФИО'); return; }
-    const title=inpTitle.value.trim();
-    const size=computeNodeSize(name,title);
-    if(editingNodeId){ const n=getNode(editingNodeId); n.name=name; n.title=title; n.w=size.w; n.h=size.h; dialog.style.display='none'; draw(); save(); return; }
-    const x = 200 + Math.random()*200, y = 160 + Math.random()*120;
-    const node={ id:uid(), name, title, x, y, w:size.w, h:size.h, fill:'#101735' };
+  dlgCancel.addEventListener('click', function(){ dialog.style.display='none'; });
+  dlgSave.addEventListener('click', function(){
+    var name=inpName.value.trim(); if(!name){ alert('Введите ФИО'); return; }
+    var title=inpTitle.value.trim();
+    var size=computeNodeSize(name,title);
+    if(editingNodeId){ var n=getNode(editingNodeId); n.name=name; n.title=title; n.w=size.w; n.h=size.h; dialog.style.display='none'; draw(); save(); return; }
+    var x = 200 + Math.random()*200, y = 160 + Math.random()*120;
+    var node={ id:uid(), name:name, title:title, x:x, y:y, w:size.w, h:size.h, fill:'#101735' };
     state.nodes.push(node); dialog.style.display='none'; draw(); save();
   });
 
   // ===== Автовыравнивание =====
   function autoLayout(){
-    const indeg=new Map(); state.nodes.forEach(n=>indeg.set(n.id,0)); state.edges.forEach(e=> indeg.set(e.to, (indeg.get(e.to)||0)+1 ));
-    const children=new Map(); state.edges.forEach(e=>{ const arr=children.get(e.from)||[]; arr.push(e.to); children.set(e.from,arr); });
-    const level=new Map(); const q=[]; state.nodes.forEach(n=>{ if((indeg.get(n.id)||0)===0) { level.set(n.id,1); q.push(n.id); } });
-    while(q.length){ const v=q.shift(); const lv=level.get(v)||1; (children.get(v)||[]).forEach(u=>{ level.set(u, Math.max(level.get(u)||1, lv+1)); q.push(u); }); }
-    const groups=new Map(); state.nodes.forEach(n=>{ const lv=level.get(n.id)||1; const arr=groups.get(lv)||[]; arr.push(n); groups.set(lv,arr); });
-    const stageWidth = 2000; const startY = 140; const rowGap = 140; const colGap = 40;
-    const levels=[...groups.keys()].sort((a,b)=>a-b);
-    levels.forEach((lv,i)=>{
-      const row=(groups.get(lv)||[]).sort((a,b)=> a.x - b.x);
-      let sumW=row.reduce((s,n)=>s+n.w,0); let total = sumW + colGap*(Math.max(0,row.length-1));
-      let x = (stageWidth - total)/2; const y = startY + i*rowGap;
-      row.forEach(n=>{ n.x=Math.round(x); n.y=Math.round(y); x += n.w + colGap; });
+    var indeg=new Map(); state.nodes.forEach(function(n){ indeg.set(n.id,0); }); state.edges.forEach(function(e){ indeg.set(e.to, (indeg.get(e.to)||0)+1 ); });
+    var children=new Map(); state.edges.forEach(function(e){ var arr=children.get(e.from)||[]; arr.push(e.to); children.set(e.from,arr); });
+    var level=new Map(); var q=[]; state.nodes.forEach(function(n){ if((indeg.get(n.id)||0)===0) { level.set(n.id,1); q.push(n.id); } });
+    while(q.length){ var v=q.shift(); var lv=level.get(v)||1; (children.get(v)||[]).forEach(function(u){ level.set(u, Math.max(level.get(u)||1, lv+1)); q.push(u); }); }
+    var groups=new Map(); state.nodes.forEach(function(n){ var lv=level.get(n.id)||1; var arr=groups.get(lv)||[]; arr.push(n); groups.set(lv,arr); });
+    var stageWidth = 2000; var startY = 140; var rowGap = 140; var colGap = 40;
+    var levels=Array.from(groups.keys()).sort(function(a,b){return a-b;});
+    levels.forEach(function(lv,i){
+      var row=(groups.get(lv)||[]).sort(function(a,b){ return a.x - b.x; });
+      var sumW=row.reduce(function(s,n){return s+n.w;},0); var total = sumW + colGap*(Math.max(0,row.length-1));
+      var x = (stageWidth - total)/2; var y = startY + i*rowGap;
+      row.forEach(function(n){ n.x=Math.round(x); n.y=Math.round(y); x += n.w + colGap; });
     });
     draw(); save();
   }
 
   // ===== Экспорт / Импорт JSON =====
   function exportJSON(){
-    const data = { orgName: state.orgName, nodes: state.nodes, edges: state.edges };
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orgchart.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    var data = { orgName: state.orgName, nodes: state.nodes, edges: state.edges };
+    var blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'orgchart.json'; a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
   }
   function importJSON(){
-    const inp = document.createElement('input'); inp.type='file'; inp.accept='application/json';
-    inp.onchange = async ()=>{
-      const f = inp.files[0]; if(!f) return; try{
-        const obj = JSON.parse(await f.text());
-        if(!obj || !Array.isArray(obj.nodes) || !Array.isArray(obj.edges)) throw new Error('Неверный формат');
-        state.orgName = obj.orgName || 'Организация';
-        state.nodes = obj.nodes.map(n=>({ id:n.id||uid(), name:n.name||'', title:n.title||'', x:+n.x||0, y:+n.y||0, w:+n.w||160, h:+n.h||40, fill:n.fill||'#101735' }));
-        state.edges = obj.edges.map(e=>({ id:e.id||('e_'+uid()), from:e.from, to:e.to })).filter(e=> e.from && e.to);
-        draw(); save();
-      }catch(err){ alert('Ошибка чтения JSON: '+err.message); }
+    var inp = document.createElement('input'); inp.type='file'; inp.accept='application/json';
+    inp.onchange = function(){
+      var f = inp.files[0]; if(!f) return; var reader=new FileReader(); reader.onload=function(){
+        try{
+          var obj = JSON.parse(reader.result);
+          if(!obj || !Array.isArray(obj.nodes) || !Array.isArray(obj.edges)) throw new Error('Неверный формат');
+          state.orgName = obj.orgName || 'Организация';
+          state.nodes = obj.nodes.map(function(n){ var s=computeNodeSize(n.name||'', n.title||''); return { id:n.id||uid(), name:n.name||'', title:n.title||'', x:+n.x||0, y:+n.y||0, w:+n.w||s.w, h:+n.h||s.h, fill:n.fill||'#101735' }; });
+          state.edges = obj.edges.map(function(e){ return { id:e.id||('e_'+uid()), from:e.from, to:e.to }; }).filter(function(e){ return e.from && e.to; });
+          draw(); save();
+        }catch(err){ alert('Ошибка чтения JSON: '+err.message); }
+      }; reader.readAsText(f);
     };
     inp.click();
   }
 
   // ===== Прочее =====
-  org.addEventListener('click', ()=>{ if(!editMode) return; const v=prompt('Название организации:', state.orgName||''); if(v!=null){ state.orgName=v.trim()||'Организация'; draw(); save(); } });
-  stage.addEventListener('click', ()=>{ if(!editMode) return; clearSelection(); if(linkMode && ghost){ cancelGhost(); modeBadge.textContent='Режим: связь'; } const es=gEdges.querySelector('.edge.selected'); if(es) es.classList.remove('selected'); });
-  window.addEventListener('keydown', (e)=>{ if(!editMode) return; if(e.key==='Delete'){ deleteNodeBtn.click(); } });
+  org.addEventListener('click', function(){ if(!editMode) return; var v=prompt('Название организации:', state.orgName||''); if(v!=null){ state.orgName=v.trim()||'Организация'; draw(); save(); } });
+  stage.addEventListener('click', function(){ if(!editMode) return; clearSelection(); if(linkMode && ghost){ cancelGhost(); modeBadge.textContent='Режим: связь'; } var es=gEdges.querySelector('.edge.selected'); if(es) es.classList.remove('selected'); });
+  window.addEventListener('keydown', function(e){ if(!editMode) return; if(e.key==='Delete'){ deleteNodeBtn.click(); } });
 
-  // ===== Экспорт PNG (инлайн-стили) =====
+  // ===== Экспорт PNG =====
   function exportPNG(){
-    const bbox=stage.getBBox(); const margin=24; const w=Math.max(600, bbox.width+margin*2); const h=Math.max(300, bbox.height+margin*2);
-    const clone=stage.cloneNode(true); clone.setAttribute('viewBox', `${bbox.x-margin} ${bbox.y-margin} ${w} ${h}`); clone.setAttribute('width',w); clone.setAttribute('height',h); clone.setAttribute('style','background:#ffffff');
-    const svgData=new XMLSerializer().serializeToString(clone); const svgBlob=new Blob([svgData],{type:'image/svg+xml;charset=utf-8'}); const url=URL.createObjectURL(svgBlob);
-    const img=new Image(); img.onload=()=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; const ctx=c.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0); URL.revokeObjectURL(url); c.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='orgchart.png'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); },'image/png'); }; img.src=url;
+    var bbox=stage.getBBox(); var margin=24; var w=Math.max(600, bbox.width+margin*2); var h=Math.max(300, bbox.height+margin*2);
+    var clone=stage.cloneNode(true); clone.setAttribute('viewBox', (bbox.x-margin)+' '+(bbox.y-margin)+' '+w+' '+h); clone.setAttribute('width',w); clone.setAttribute('height',h); clone.setAttribute('style','background:#ffffff');
+    var svgData=new XMLSerializer().serializeToString(clone); var svgBlob=new Blob([svgData],{type:'image/svg+xml;charset=utf-8'}); var url=URL.createObjectURL(svgBlob);
+    var img=new Image(); img.onload=function(){ var c=document.createElement('canvas'); c.width=w; c.height=h; var ctx=c.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0); URL.revokeObjectURL(url); c.toBlob(function(b){ var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='orgchart.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000); },'image/png'); }; img.src=url;
   }
 
-  function getSvgPoint(ev){ const pt=stage.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; return pt.matrixTransform(stage.getScreenCTM().inverse()); }
+  function getSvgPoint(ev){ var pt=stage.createSVGPoint(); pt.x=ev.clientX; pt.y=ev.clientY; return pt.matrixTransform(stage.getScreenCTM().inverse()); }
 
   // ===== Старт =====
   draw();
