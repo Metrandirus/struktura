@@ -51,8 +51,8 @@
         <span id="saveBadge" class="badge" style="display:none"></span>
         <div id="toolsInline" class="tools-inline" style="display:none;gap:8px;align-items:center;margin-left:12px">
           <button id="autoLayoutBtn" class="btn small success">📐 Автовыравнивание</button>
-          <button id="addNodeBtn" class="btn small">➕ Сотрудник<\/button>
-          <button id="editNodeBtn" class="btn small">✏️ Редактировать ячейку<\/button>
+          <button id="addNodeBtn" class="btn small">➕ Сотрудник</button>
+          <button id="editNodeBtn" class="btn small">✏️ Редактировать ячейку</button>
           <button id="linkDrawBtn" class="btn small">🔗 Связать ячейки</button>
           <button id="linkDeleteBtn" class="btn small warn">🧹 Удалить связь ячеек</button>
           <button id="deleteNodeBtn" class="btn small warn">🗑️ Удалить узел</button>
@@ -77,8 +77,6 @@
     </div>
 
     <div class="stage-wrap" id="stageWrap">
-      </div>
-
       <svg id="stage" class="stage" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 1200">
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -92,7 +90,6 @@
           <text id="orgText" x="140" y="36" text-anchor="middle" style="font-weight:700;fill:#eaf0ff">Моя организация</text>
         </g>
       </svg>
-      
     </div>
   </div>
 
@@ -163,7 +160,7 @@
   function uid(){ return 'n' + Math.random().toString(36).slice(2,9); }
   function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); showSaved(); }
   function load(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw? JSON.parse(raw):null; }catch(e){ return null; } }
-  function showSaved(){ /* скрыто: бейдж не показываем */ }, 1200); }
+  function showSaved(){ /* скрыто: бейдж не показываем */ }
 
   // Измерение ширины текста (для автоширины)
   var measCanvas = document.createElement('canvas');
@@ -304,7 +301,7 @@
 
   // ===== Тулбар =====
   addNodeBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} editingNodeId=null; openDialog('', ''); });
-  editNodeBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} if(!selectedNodeId){ alert('Сначала выберите ячейку.'); return;} var n=getNode(selectedNodeId); editingNodeId=n.id; openDialog(n.name||'', n.title||''); }); return;} editingNodeId=null; openDialog('', ''); });
+  editNodeBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} if(!selectedNodeId){ alert('Сначала выберите ячейку.'); return;} var n=getNode(selectedNodeId); editingNodeId=n.id; openDialog(n.name||'', n.title||''); });
   linkDrawBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} linkMode=!linkMode; linkDeleteMode=false; if(!linkMode) cancelGhost(); modeBadge.textContent = linkMode? 'Режим: связь' : 'Режим: выбор'; });
   linkDeleteBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} linkDeleteMode=!linkDeleteMode; linkMode=false; cancelGhost(); modeBadge.textContent = linkDeleteMode? 'Удаление связи' : 'Режим: выбор'; });
   deleteNodeBtn.addEventListener('click', function(){ if(!editMode){ alert('Включите режим редактирования.'); return;} if(!selectedNodeId){ alert('Выберите узел.'); return;} if(!confirm('Удалить выбранный узел?')) return; removeNode(selectedNodeId); clearSelection(); draw(); save(); });
