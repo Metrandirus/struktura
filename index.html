@@ -112,6 +112,19 @@
   const STORAGE_KEY = 'orgchart_svg_v5';
   const state = load() || { orgName:'Моя организация', nodes:[], edges:[] };
 
+  // --- Polyfills for older SVG (GitHub Pages browsers) ---
+  (function(){
+    if(!Element.prototype.matches){
+      Element.prototype.matches = Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector || function(s){
+        const m = (this.document || this.ownerDocument).querySelectorAll(s);
+        let i = m.length; while(--i >= 0 && m.item(i) !== this){}; return i > -1;
+      };
+    }
+    if(!Element.prototype.closest){
+      Element.prototype.closest = function(s){ let el = this; while(el && el.nodeType === 1){ if(el.matches(s)) return el; el = el.parentElement || el.parentNode; } return null; };
+    }
+  })();
+
   // ===== DOM =====
   const stage = document.getElementById('stage');
   const gNodes = document.getElementById('nodes');
@@ -208,9 +221,19 @@
   }
 
   function svgEl(tag, attrs){ const el=document.createElementNS('http://www.w3.org/2000/svg', tag); for(const k in attrs){ el.setAttribute(k, attrs[k]); } return el; }
-  function updateEdgesAll(){ // пересчитать все рёбра от текущих позиций
+  function updateEdgesAll(){
+    // Полный пересчёт всех рёбер — надёжно, без пропусков
     const lines=gEdges.querySelectorAll('line');
-    lines.forEach(line=>{ const e=state.edges.find(x=>x.id===line.dataset.id); if(!e) return; const s=getNode(e.from), t=getNode(e.to); if(!s||!t) return; line.setAttribute('x1', s.x+s.w/2); line.setAttribute('y1', s.y+s.h/2); line.setAttribute('x2', t.x+t.w/2); line.setAttribute('y2', t.y+t.h/2); });
+    lines.forEach(line=>{
+      const e=state.edges.find(x=>x.id===line.dataset.id); if(!e) return;
+      const s=getNode(e.from), t=getNode(e.to); if(!s||!t) return;
+      line.setAttribute('x1', s.x + s.w/2);
+      line.setAttribute('y1', s.y + s.h/2);
+      line.setAttribute('x2', t.x + t.w/2);
+      line.setAttribute('y2', t.y + t.h/2);
+      line.setAttribute('marker-end','url(#arrow)');
+    });
+  });
   }
 
   // ===== Выделение =====
@@ -226,6 +249,7 @@
     // перетаскивание
     drag={id, dx:pt.x-n.x, dy:pt.y-n.y};
     window.addEventListener('pointermove', nodePointerMove);
+    window.addEventListener('mousemove', nodePointerMove);
     window.addEventListener('pointerup', nodePointerUp, {once:true});
   }
   function nodePointerMove(ev){
@@ -235,16 +259,17 @@
     updateEdgesAll(); // подтягиваем все стрелки
     if(ghost) updateGhostTo(ev);
   }
-  function nodePointerUp(){ drag=null; save(); }
+  function nodePointerUp(){ drag=null; save(); window.removeEventListener('mousemove', nodePointerMove); }
   function nodeDblClick(ev){ if(!editMode) return; const id=ev.currentTarget.dataset.id; const n=getNode(id); editingNodeId=id; openDialog(n.name||'', n.title||''); }
 
   // ===== Связи (стрелка-призрак) =====
   function startGhostFrom(nodeId){
     const n=getNode(nodeId); linkSourceId=nodeId; modeBadge.textContent='Выберите целевую ячейку…';
-    const x=n.x+n.w/2,y=n.y+n.h/2; ghost=svgEl('line',{x1:x,y1:y,x2:x,y2:y, class:'edge', 'marker-end':'url(#arrow)', stroke:'#3a9ad9','stroke-width':2});
+    const x=n.x+n.w/2,y=n.y+n.h/2; ghost=svgEl('line',{x1:x,y1:y,x2:x,y2:y, class:'edge', 'marker-end':'url(#arrow)', stroke:'#3a9ad9','stroke-width':2, 'pointer-events':'none'});
     gEdges.appendChild(ghost);
     window.addEventListener('pointermove', updateGhostTo);
     window.addEventListener('pointerup', ghostPointerUp, {once:true});
+    window.addEventListener('mouseup', ghostPointerUp, {once:true});
   }
   function updateGhostTo(ev){ if(!ghost) return; const pt=getSvgPoint(ev); ghost.setAttribute('x2',pt.x); ghost.setAttribute('y2',pt.y); }
   function ghostPointerUp(ev){
