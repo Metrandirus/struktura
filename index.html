@@ -1,536 +1,256 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Оргструктура — редактор</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='20' rx='4' fill='%231e2a5a' stroke='%234a64d8'/%3E%3C/svg%3E">
   <style>
-    :root{--bg:#0f1220;--panel:#171a2b;--panel2:#0d1020;--text:#eaf0ff;--muted:#9aa3b2;--border:#232947}
+    :root{ --bg:#0f1220; --panel:#171a2b; --panel-2:#0d1020; --text:#eaf0ff; --muted:#9aa3b2; --border:#232947; }
     *{box-sizing:border-box}
     html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
     .app{display:grid;grid-template-rows:auto 1fr;height:100%}
-    .topbar{display:flex;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel2))}
-    .title{display:flex;gap:10px;align-items:center;font-weight:700}
-    .tools{display:none;gap:8px;align-items:center;margin-left:12px}
-    .right{margin-left:auto;display:flex;gap:8px}
-    .btn{border:1px solid var(--border);background:#12162a;color:#eaf0ff;padding:6px 10px;border-radius:10px;cursor:pointer}
-    .btn:hover{border-color:#2f3868}
+    .topbar{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));position:sticky;top:0;z-index:10}
+    .topbar .right{margin-left:auto;display:flex;gap:8px}
+    .btn{border:1px solid var(--border);background:#12162a;color:var(--text);padding:8px 10px;border-radius:10px;cursor:pointer;transition:.15s}
+    .btn:hover{border-color:#2f3868;transform:translateY(-1px)}
     .btn.primary{background:linear-gradient(180deg,#2a3370,#1e2655);border-color:#364080}
     .btn.warn{background:linear-gradient(180deg,#5e2b2b,#441d1d);border-color:#7a3030}
-    .btn.ok{background:linear-gradient(180deg,#21564f,#1a4641);border-color:#2d7e73}
-    .badge{padding:4px 8px;border:1px solid var(--border);border-radius:999px;color:#9aa3b2;display:none}
-    .stage-wrap{overflow:auto}
-    .stage{width:2400px;height:1600px;background:repeating-conic-gradient(from 0deg,#10142a 0 25%,#0e1226 0 50%) 0 0/24px 24px}
+    .btn.success{background:linear-gradient(180deg,#21564f,#1a4641);border-color:#2d7e73}
+    .btn.small{padding:6px 8px;font-size:12px}
+    .badge{display:inline-block;padding:4px 8px;border:1px solid var(--border);border-radius:999px;background:#12162a;color:#9aa3b2}
+    .palette{display:flex;gap:6px;align-items:center;margin-left:2px}
+    .swatch{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);cursor:pointer}
+    .stage-wrap{position:relative;overflow:auto}
+    .stage{width:2200px;height:1400px;background:repeating-conic-gradient(from 0deg,#10142a 0 25%,#0e1226 0 50%) 0 0/24px 24px;border-bottom-left-radius:12px;border-bottom-right-radius:12px}
     svg{display:block}
+    .node.selected rect.border{stroke:#7aa2ff}
     .org rect{fill:#16225a;stroke:#6a7eea;stroke-width:2;rx:14;ry:14}
-    .node.selected rect{stroke:#7aa2ff;stroke-width:2}
     .edge{stroke:#3a9ad9;stroke-width:2;fill:none}
     .edge.selected{stroke:#7aa2ff}
-    .palette{display:flex;gap:6px;align-items:center}
-    .swatch{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);cursor:pointer}
   </style>
 </head>
 <body>
-<div class="app">
-  <div class="topbar">
-    <div class="title">
-      Оргструктура
-      <div id="tools" class="tools">
-        <button id="autoLayoutBtn" class="btn ok">📐 Автовыравнивание</button>
-        <button id="addNodeBtn" class="btn">➕ Сотрудник</button>
-        <button id="editNodeBtn" class="btn">✏️ Редактировать ячейку</button>
-        <button id="linkBtn" class="btn">🔗 Связать ячейки</button>
-        <div class="palette">
-          🎨
-          <button class="swatch" data-color="#101735" style="background:#101735"></button>
-          <button class="swatch" data-color="#1a2746" style="background:#1a2746"></button>
-          <button class="swatch" data-color="#263b7a" style="background:#263b7a"></button>
-          <button class="swatch" data-color="#204f4a" style="background:#204f4a"></button>
-          <button class="swatch" data-color="#5a2a2a" style="background:#5a2a2a"></button>
-          <button class="swatch" data-color="#4a2560" style="background:#4a2560"></button>
+  <div class="app">
+    <div class="topbar">
+      <div class="left">
+        <strong>Оргструктура</strong>
+        <div id="toolsInline" style="display:none;gap:8px;align-items:center;margin-left:12px">
+          <button id="undoBtn" class="btn small">↩️ Отменить</button>
+          <button id="autoLayoutBtn" class="btn small success">📐 Автовыравнивание</button>
+          <button id="addNodeBtn" class="btn small">➕ Сотрудник</button>
+          <button id="editNodeBtn" class="btn small">✏️ Редактировать ячейку</button>
+          <button id="linkDrawBtn" class="btn small">🔗 Связать ячейки</button>
+          <button id="linkDeleteBtn" class="btn small warn">🧹 Удалить связь</button>
+          <button id="deleteBtn" class="btn small warn">🗑️ Удалить выбранное</button>
+          <div class="palette" title="Заливка">
+            🎨
+            <button class="swatch" data-color="#101735" style="background:#101735"></button>
+            <button class="swatch" data-color="#1a2746" style="background:#1a2746"></button>
+            <button class="swatch" data-color="#263b7a" style="background:#263b7a"></button>
+            <button class="swatch" data-color="#204f4a" style="background:#204f4a"></button>
+            <button class="swatch" data-color="#5a2a2a" style="background:#5a2a2a"></button>
+            <button class="swatch" data-color="#4a2560" style="background:#4a2560"></button>
+          </div>
+          <span id="modeBadge" class="badge">Режим: выбор</span>
         </div>
-        <span>↕️ Размер:</span>
-        <button id="smallerBtn" class="btn">🔽</button>
-        <button id="biggerBtn" class="btn">🔼</button>
-        <button id="deleteBtn" class="btn warn">🗑️ Удалить</button>
-        <span id="modeBadge" class="badge" style="display:inline-block">Режим: выбор</span>
+      </div>
+      <div class="right">
+        <button id="exportPngBtn" class="btn">🖼️ PNG</button>
+        <button id="exportJsonBtn" class="btn">💾 Сохранить JSON</button>
+        <button id="importJsonBtn" class="btn">📂 Загрузить JSON</button>
+        <button id="editBtn" class="btn primary">✏️ Редактирование</button>
       </div>
     </div>
-    <div class="right">
-      <button id="pngBtn" class="btn">🖼️ PNG</button>
-      <button id="saveBtn" class="btn">💾 Сохранить JSON</button>
-      <button id="loadBtn" class="btn">📂 Загрузить JSON</button>
-      <button id="editBtn" class="btn primary">✏️ Редактирование</button>
+
+    <div class="stage-wrap">
+      <svg id="stage" class="stage" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2200 1400">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#3a9ad9"></path>
+          </marker>
+        </defs>
+        <g id="edges"></g>
+        <g id="nodes"></g>
+        <g id="org" class="org" transform="translate(960,40)">
+          <rect x="0" y="0" width="320" height="64" rx="14" ry="14"></rect>
+          <text id="orgText" x="160" y="38" text-anchor="middle" style="font-weight:700;fill:#eaf0ff">Моя организация</text>
+        </g>
+      </svg>
     </div>
   </div>
 
-  <div class="stage-wrap">
-    <svg id="stage" class="stage" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 1600" aria-label="orgchart">
-      <defs>
-        <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#3a9ad9"></path>
-        </marker>
-      </defs>
-      <g id="edges"></g>
-      <g id="nodes"></g>
-      <g id="org" transform="translate(960,40)">
-        <rect x="0" y="0" width="320" height="64" rx="14" ry="14"></rect>
-        <text id="orgText" x="160" y="38" text-anchor="middle" style="font-weight:700;fill:#eaf0ff">Моя организация</text>
-      </g>
-    </svg>
-  </div>
-</div>
-
-<!-- Диалог -->
-<div id="dlg" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45)">
-  <div style="width:min(480px,90vw);background:#0c1022;border:1px solid #232947;border-radius:16px;padding:14px">
-    <h3 style="margin:0 0 8px">Сотрудник</h3>
-    <label style="color:#9aa3b2">ФИО</label>
-    <input id="inpName" style="width:100%;padding:8px 10px;border:1px solid #232947;background:#0b0f22;color:#eaf0ff;border-radius:10px">
-    <label style="color:#9aa3b2">Должность</label>
-    <input id="inpTitle" style="width:100%;padding:8px 10px;border:1px solid #232947;background:#0b0f22;color:#eaf0ff;border-radius:10px">
-    <div style="display:flex;gap:8px;margin-top:10px">
-      <button id="dlgOk" class="btn primary" style="flex:1">Сохранить</button>
-      <button id="dlgCancel" class="btn" style="flex:1">Отмена</button>
+  <div id="dialog" class="dialog" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:20">
+    <div class="card" style="width:min(460px,90vw);background:#0c1022;border:1px solid var(--border);border-radius:16px;padding:14px">
+      <h3 style="margin:0 0 8px">Сотрудник</h3>
+      <label style="display:block;margin:8px 0 4px;color:#9aa3b2">ФИО</label>
+      <input id="inpName" style="width:100%;padding:8px 10px;border:1px solid var(--border);background:#0b0f22;color:#eaf0ff;border-radius:10px" />
+      <label style="display:block;margin:8px 0 4px;color:#9aa3b2">Должность</label>
+      <input id="inpTitle" style="width:100%;padding:8px 10px;border:1px solid var(--border);background:#0b0f22;color:#eaf0ff;border-radius:10px" />
+      <div class="row" style="display:flex;gap:8px;margin-top:10px">
+        <button id="dlgSave" class="btn primary" style="flex:1">Сохранить</button>
+        <button id="dlgCancel" class="btn" style="flex:1">Отмена</button>
+      </div>
     </div>
   </div>
-</div>
 
 <script>
-/* ===== Модель ===== */
-const STORAGE_KEY='orgchart_plus_v2';
-const state=load()||{org:{x:960,y:40,text:'Моя организация',visible:true},nodes:[],edges:[]};
+// ===== Модель =====
+const STORAGE_KEY='orgchart_svg_v8';
+const state = load() || { org:{x:960,y:40,text:'Моя организация',visible:true}, nodes:[], edges:[] };
 
-/* ===== Константы ===== */
-const PADX=14,PADY=10,GAP=6,NAME_BASE=16,TITLE_BASE=12,MIN_W=120,MIN_H=48,FS_MIN=0.6,FS_MAX=2.2;
-const SNAP=12, PUSH_GAP=16;
+// ===== История (Undo) =====
+const HISTORY_LIMIT=50; const history=[];
+function snapshot(){ return JSON.parse(JSON.stringify(state)); }
+function pushHistory(){ history.push(snapshot()); if(history.length>HISTORY_LIMIT) history.shift(); }
+function undo(){ if(history.length===0) return; const prev=history.pop(); state.org=prev.org; state.nodes=prev.nodes; state.edges=prev.edges; draw(); save(false); }
 
-/* ===== DOM ===== */
+// Polyfills
+(function(){ if(!Element.prototype.matches){ Element.prototype.matches = Element.prototype.msMatchesSelector||Element.prototype.webkitMatchesSelector||function(s){ const m=(this.document||this.ownerDocument).querySelectorAll(s); let i=m.length; while(--i>=0&&m.item(i)!==this){} return i>-1; }; } if(!Element.prototype.closest){ Element.prototype.closest=function(s){ let el=this; while(el&&el.nodeType===1){ if(el.matches(s)) return el; el=el.parentElement||el.parentNode; } return null; }; } })();
+
+// ===== DOM =====
 const stage=document.getElementById('stage');
 const gNodes=document.getElementById('nodes');
 const gEdges=document.getElementById('edges');
 const orgG=document.getElementById('org');
 const orgText=document.getElementById('orgText');
-
-const tools=document.getElementById('tools');
-const modeBadge=document.getElementById('modeBadge');
+const toolsInline=document.getElementById('toolsInline');
 const editBtn=document.getElementById('editBtn');
-const pngBtn=document.getElementById('pngBtn');
-const saveBtn=document.getElementById('saveBtn');
-const loadBtn=document.getElementById('loadBtn');
-
+const exportPngBtn=document.getElementById('exportPngBtn');
+const exportJsonBtn=document.getElementById('exportJsonBtn');
+const importJsonBtn=document.getElementById('importJsonBtn');
+const undoBtn=document.getElementById('undoBtn');
 const addNodeBtn=document.getElementById('addNodeBtn');
 const editNodeBtn=document.getElementById('editNodeBtn');
-const linkBtn=document.getElementById('linkBtn');
+const linkDrawBtn=document.getElementById('linkDrawBtn');
+const linkDeleteBtn=document.getElementById('linkDeleteBtn');
 const deleteBtn=document.getElementById('deleteBtn');
 const autoLayoutBtn=document.getElementById('autoLayoutBtn');
-const smallerBtn=document.getElementById('smallerBtn');
-const biggerBtn=document.getElementById('biggerBtn');
-const palette=Array.from(document.querySelectorAll('.swatch'));
-
-const dlg=document.getElementById('dlg');
-const dlgOk=document.getElementById('dlgOk');
-const dlgCancel=document.getElementById('dlgCancel');
+const modeBadge=document.getElementById('modeBadge');
+const dialog=document.getElementById('dialog');
 const inpName=document.getElementById('inpName');
 const inpTitle=document.getElementById('inpTitle');
+const dlgSave=document.getElementById('dlgSave');
+const dlgCancel=document.getElementById('dlgCancel');
+const palette=[...document.querySelectorAll('.swatch')];
 
-/* ===== Состояние ===== */
-let editMode=false,linkMode=false;
+// ===== Состояние =====
+let editMode=false, linkMode=false, linkDeleteMode=false;
 let selectedNodes=new Set();
-let selectedEdgeId=null,linkSourceId=null,editingNodeId=null;
-let dragGroup=null, ghost=null; // dragGroup={ids:[...], offsets:{id:{dx,dy}}}
-let dragOrg=null, orgSelected=false;
+let selectedEdgeId=null, linkSourceId=null, editingNodeId=null;
+let dragGroup=null, ghost=null; let dragOrg=null, orgSelected=false;
 
-/* ===== Утилиты ===== */
-function uid(){return 'n'+Math.random().toString(36).slice(2,9)}
-function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}
-function load(){try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null}catch(e){return null}}
+// ===== Утилиты =====
+function uid(){ return 'n'+Math.random().toString(36).slice(2,9); }
+function save(push=true){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){} }
+function load(){ try{ const raw=localStorage.getItem(STORAGE_KEY); return raw?JSON.parse(raw):null; }catch(e){ return null; } }
 
-const meas=document.createElement('canvas');const mctx=meas.getContext('2d');
-function measure(text,font){mctx.font=font;return Math.ceil(mctx.measureText(text||'').width)}
+const measCanvas=document.createElement('canvas'); const measCtx=measCanvas.getContext('2d');
+function measure(text,font){ measCtx.font=font; return Math.ceil(measCtx.measureText(text||'').width); }
+const NAME_FONT="700 16px system-ui,-apple-system,Segoe UI,Roboto,Arial"; const TITLE_FONT="12px system-ui,-apple-system,Segoe UI,Roboto,Arial";
+const PADX=14, PADY=10, GAP=6, NAME_H=18, TITLE_H=14;
+function computeNodeSize(name,title){ const nameW=Math.max(measure(name||'',NAME_FONT),80); const titleW=Math.max(measure(title||'',TITLE_FONT),60); const w=Math.max(160, nameW+PADX*2, title?(titleW+PADX*2):0); const h=PADY+NAME_H+(title?(GAP+TITLE_H):0)+PADY; return {w,h}; }
+function getNode(id){ return state.nodes.find(n=>n.id===id); }
+function removeNode(id){ state.nodes=state.nodes.filter(n=>n.id!==id); state.edges=state.edges.filter(e=>e.from!==id&&e.to!==id); }
+function edgeExists(a,b){ return state.edges.some(e=>e.from===a&&e.to===b); }
+function wouldCycle(sourceId,targetId){ const parentsOf=new Map(); state.edges.forEach(e=>{ const a=parentsOf.get(e.to)||[]; a.push(e.from); parentsOf.set(e.to,a); }); const stack=[sourceId]; const seen=new Set(); while(stack.length){ const cur=stack.pop(); if(seen.has(cur)) continue; seen.add(cur); if(cur===targetId) return true; (parentsOf.get(cur)||[]).forEach(p=>stack.push(p)); } return false; }
+function centerX(n){ return n.type==='hub'? n.x : n.x+n.w/2; } function centerY(n){ return n.type==='hub'? n.y : n.y+n.h/2; }
 
-function getNode(id){return state.nodes.find(n=>n.id===id)}
-function removeNode(id){state.nodes=state.nodes.filter(n=>n.id!==id);state.edges=state.edges.filter(e=>e.from!==id&&e.to!==id)}
-function edgeExists(a,b){return state.edges.some(e=>e.from===a&&e.to===b)}
-function wouldCycle(from,to){const parents=new Map();state.edges.forEach(e=>{const a=parents.get(e.to)||[];a.push(e.from);parents.set(e.to,a)});const st=[from],seen=new Set();while(st.length){const cur=st.pop();if(seen.has(cur))continue;seen.add(cur);if(cur===to)return true;(parents.get(cur)||[]).forEach(p=>st.push(p))}return false}
+// HUB для связи-из-стрелки
+function ensureHubForEdge(e){ const keyA=e.from+"|"+e.to, keyB=e.to+"|"+e.from; let hub=state.nodes.find(n=>n.type==='hub'&&n.anchors&&((n.anchors[0]+"|"+n.anchors[1])===keyA|| (n.anchors[0]+"|"+n.anchors[1])===keyB)); if(hub) return hub; hub={id:'j_'+uid(), type:'hub', anchors:[e.from,e.to], x:0,y:0,w:0,h:0,locked:true}; state.nodes.push(hub); return hub; }
+function refreshHubs(){ state.nodes.forEach(n=>{ if(n.type==='hub'&&Array.isArray(n.anchors)&&n.anchors.length===2){ const a=getNode(n.anchors[0]); const b=getNode(n.anchors[1]); if(a&&b){ n.x=(centerX(a)+centerX(b))/2; n.y=(centerY(a)+centerY(b))/2; } } }); }
 
-function centerX(n){return n.type==='hub'? n.x : n.x+n.w/2}
-function centerY(n){return n.type==='hub'? n.y : n.y+n.h/2}
-
-/* ===== HUB (соединение от стрелки) ===== */
-function ensureHubForEdge(e){
-  const keyA=e.from+"|"+e.to, keyB=e.to+"|"+e.from;
-  let hub=state.nodes.find(n=>n.type==='hub'&&n.anchors&&((n.anchors[0]+"|"+n.anchors[1])===keyA|| (n.anchors[0]+"|"+n.anchors[1])===keyB));
-  if(hub){return hub}
-  hub={id:'j_'+uid(),type:'hub',anchors:[e.from,e.to],x:0,y:0,w:0,h:0,locked:true};
-  state.nodes.push(hub);
-  return hub;
-}
-function refreshHubs(){
-  state.nodes.forEach(n=>{
-    if(n.type==='hub'&&Array.isArray(n.anchors)&&n.anchors.length===2){
-      const a=getNode(n.anchors[0]);
-      const b=getNode(n.anchors[1]);
-      if(a&&b){ n.x=(centerX(a)+centerX(b))/2; n.y=(centerY(a)+centerY(b))/2 }
-    }
-  })
-}
-
-/* ===== Текст в узле ===== */
-function wrapLines(text,fs,bold,maxW){
-  const font=(bold?'700 ':'')+fs+'px system-ui,-apple-system,Segoe UI,Roboto,Arial';
-  const words=String(text||'').split(/\s+/).filter(Boolean);
-  const lines=[];let cur='';
-  words.forEach(w=>{const t=cur?cur+' '+w:w; if(measure(t,font)<=Math.max(20,maxW-PADX*2)) cur=t; else { if(cur) lines.push(cur); cur=w } });
-  if(cur) lines.push(cur); if(lines.length===0) lines.push('');
-  return {lines,font}
-}
-
-/* ===== Рендер ===== */
-function svgEl(tag,attrs){const el=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const k in attrs){if(Object.prototype.hasOwnProperty.call(attrs,k))el.setAttribute(k,attrs[k])}return el}
-
-function renderNodeLabels(g,n){
-  g.querySelectorAll('text').forEach(t=>t.remove());
-  if(n.type==='hub'){return} // хаб не рисуем
-  let fs=typeof n.fs==='number'?n.fs:1, nameSize=Math.round(NAME_BASE*fs), titleSize=Math.round(TITLE_BASE*fs);
-  let nameWrap=wrapLines(n.name,nameSize,true,n.w);
-  let titleWrap=n.title?wrapLines(n.title,titleSize,false,n.w):{lines:[],font:''};
-  const hName=Math.round(nameSize*1.25), hTitle=Math.round(titleSize*1.3);
-  let need=PADY+nameWrap.lines.length*hName+(n.title?(GAP+titleWrap.lines.length*hTitle):0)+PADY;
-  if(need>n.h){
-    const k=(Math.max(MIN_H,n.h)-PADY*2)/Math.max(1,nameWrap.lines.length*hName+(n.title?(GAP+titleWrap.lines.length*hTitle):0));
-    fs=fs*Math.max(0.5,Math.min(1,k));
-    nameSize=Math.max(9,Math.round(NAME_BASE*fs));
-    titleSize=Math.max(9,Math.round(TITLE_BASE*fs));
-    nameWrap=wrapLines(n.name,nameSize,true,n.w);
-    titleWrap=n.title?wrapLines(n.title,titleSize,false,n.w):{lines:[],font:''};
-  }
-  const nameText=svgEl('text',{x:String(n.w/2),y:String(PADY),'text-anchor':'middle','dominant-baseline':'hanging',fill:'#eaf0ff','font-size':String(nameSize),'font-weight':'700','font-family':'system-ui,-apple-system,Segoe UI,Roboto,Arial'});
-  nameWrap.lines.forEach((line,i)=>{const t=svgEl('tspan',{x:String(n.w/2),dy:String(i===0?0:Math.round(nameSize*1.25))});t.textContent=line;nameText.appendChild(t)});
-  g.appendChild(nameText);
-  if(n.title){
-    const total=titleWrap.lines.length*Math.round(titleSize*1.3);
-    const yStart=Math.max(PADY+nameWrap.lines.length*Math.round(nameSize*1.25)+GAP,n.h-PADY-total);
-    const tText=svgEl('text',{x:String(n.w/2),y:String(yStart),'text-anchor':'middle','dominant-baseline':'hanging',fill:'#c8d0ee','font-size':String(titleSize),'font-family':'system-ui,-apple-system,Segoe UI,Roboto,Arial'});
-    titleWrap.lines.forEach((line,i)=>{const t=svgEl('tspan',{x:String(n.w/2),dy:String(i===0?0:Math.round(titleSize*1.3))});t.textContent=line;tText.appendChild(t)});
-    g.appendChild(tText);
-  }
-}
-
+// ===== Рендер =====
+function svgEl(tag,attrs){ const el=document.createElementNS('http://www.w3.org/2000/svg',tag); for(const k in attrs){ if(Object.prototype.hasOwnProperty.call(attrs,k)) el.setAttribute(k,attrs[k]); } return el; }
 function draw(){
   // org
-  orgG.style.display = state.org&&state.org.visible? '':'none';
-  if(state.org&&state.org.visible){ orgG.setAttribute('transform','translate('+state.org.x+','+state.org.y+')'); orgText.textContent=state.org.text||'Организация' }
+  orgG.style.display = (state.org && state.org.visible!==false)? '':'none';
+  if(state.org && state.org.visible!==false){ orgG.setAttribute('transform',`translate(${state.org.x},${state.org.y})`); orgText.textContent=state.org.text||'Организация'; }
 
   refreshHubs();
 
-  // nodes
   gNodes.innerHTML='';
   state.nodes.forEach(n=>{
-    if(n.type==='hub'){ return; } // невидимый узел
-    if(!n.w||!n.h){n.w=200;n.h=64}
-    if(typeof n.fs!=='number') n.fs=1;
-    const g=svgEl('g',{transform:'translate('+n.x+','+n.y+')',class:'node'}); g.dataset.id=n.id;
-    const rect=svgEl('rect',{x:'0',y:'0',width:String(n.w),height:String(n.h),rx:'12',ry:'12',fill:n.fill||'#101735',stroke:'#2d3a70','stroke-width':'2'});
-    g.appendChild(rect);
-    renderNodeLabels(g,n);
-    g.addEventListener('pointerdown',onNodeDown);
-    g.addEventListener('mousedown',onNodeDown);
-    g.addEventListener('click',onNodeClick);
-    g.addEventListener('dblclick',onNodeDbl);
+    if(n.type==='hub') return; // не рисуем хабы
+    if(!n.w||!n.h){ const s=computeNodeSize(n.name,n.title); n.w=s.w; n.h=s.h; }
+    const g=svgEl('g',{class:'node',transform:`translate(${n.x},${n.y})`}); g.dataset.id=n.id;
+    const border=svgEl('rect',{class:'border',x:0,y:0,width:n.w,height:n.h,rx:12,ry:12,fill:n.fill||'#101735',stroke:'#2d3a70','stroke-width':2});
+    const nameT=svgEl('text',{x:n.w/2,y:PADY,'text-anchor':'middle','dominant-baseline':'hanging',fill:'#eaf0ff','font-weight':'700','font-size':'16px','font-family':'system-ui,-apple-system,Segoe UI,Roboto,Arial'});
+    nameT.textContent=n.name||'';
+    g.appendChild(border); g.appendChild(nameT);
+    if(n.title){ const titleY=n.h-PADY; const titleT=svgEl('text',{x:n.w/2,y:titleY,'text-anchor':'middle',fill:'#c8d0ee','font-size':'12px','font-family':'system-ui,-apple-system,Segoe UI,Roboto,Arial'}); titleT.textContent=n.title||''; g.appendChild(titleT); }
+    g.addEventListener('pointerdown',nodePointerDown); g.addEventListener('mousedown',nodePointerDown); g.addEventListener('click',nodeClick); g.addEventListener('dblclick',nodeDblClick);
     gNodes.appendChild(g);
   });
 
-  // edges
   gEdges.innerHTML='';
-  state.edges.forEach(e=>{
-    const a=getNode(e.from), b=getNode(e.to); if(!a||!b) return;
-    const line=svgEl('line',{x1:String(centerX(a)),y1:String(centerY(a)),x2:String(centerX(b)),y2:String(centerY(b)),class:'edge','marker-end':'url(#arrow)',stroke:'#3a9ad9','stroke-width':'2'});
-    line.dataset.id=e.id; line.addEventListener('click',onEdgeClick); gEdges.appendChild(line);
-  });
+  state.edges.forEach(e=>{ const a=getNode(e.from), b=getNode(e.to); if(!a||!b) return; const line=svgEl('line',{x1:centerX(a),y1:centerY(a),x2:centerX(b),y2:centerY(b),class:'edge','marker-end':'url(#arrow)',stroke:'#3a9ad9','stroke-width':2}); line.dataset.id=e.id; line.addEventListener('click',edgeClick); gEdges.appendChild(line); });
 }
+function updateEdgesAll(){ refreshHubs(); gEdges.querySelectorAll('line').forEach(line=>{ const e=state.edges.find(x=>x.id===line.dataset.id); if(!e) return; const s=getNode(e.from),t=getNode(e.to); if(!s||!t) return; line.setAttribute('x1',centerX(s)); line.setAttribute('y1',centerY(s)); line.setAttribute('x2',centerX(t)); line.setAttribute('y2',centerY(t)); line.setAttribute('marker-end','url(#arrow)'); }); }
 
-function updateEdgesAll(){
-  refreshHubs();
-  gEdges.querySelectorAll('line').forEach(line=>{
-    const e=state.edges.find(x=>x.id===line.dataset.id); if(!e) return;
-    const s=getNode(e.from),t=getNode(e.to); if(!s||!t) return;
-    line.setAttribute('x1',String(centerX(s))); line.setAttribute('y1',String(centerY(s)));
-    line.setAttribute('x2',String(centerX(t))); line.setAttribute('y2',String(centerY(t)));
-  });
-}
+// ===== Выделение =====
+function clearSelection(){ selectedNodes.clear(); selectedEdgeId=null; orgSelected=false; stage.querySelectorAll('.node.selected').forEach(g=>g.classList.remove('selected')); gEdges.querySelectorAll('.edge.selected').forEach(e=>e.classList.remove('selected')); }
+function applySelCss(){ stage.querySelectorAll('.node').forEach(g=>{ const id=g.dataset.id; if(selectedNodes.has(id)) g.classList.add('selected'); else g.classList.remove('selected'); }); }
+function selectOnly(id){ clearSelection(); selectedNodes.add(id); applySelCss(); }
+function toggleSelect(id){ if(selectedNodes.has(id)) selectedNodes.delete(id); else selectedNodes.add(id); applySelCss(); }
 
-/* ===== Выделение ===== */
-function clearSel(){selectedNodes.clear();selectedEdgeId=null;stage.querySelectorAll('.node.selected').forEach(g=>g.classList.remove('selected'));gEdges.querySelectorAll('.edge.selected').forEach(l=>l.classList.remove('selected'))}
-function applySelCss(){stage.querySelectorAll('.node').forEach(g=>{const id=g.dataset.id; if(selectedNodes.has(id)) g.classList.add('selected'); else g.classList.remove('selected')})}
-function selectOnly(id){clearSel();selectedNodes.add(id);applySelCss()}
-function toggleSelect(id){ if(selectedNodes.has(id)) selectedNodes.delete(id); else selectedNodes.add(id); applySelCss() }
+// ===== Перетаскивание узлов =====
+function svgPoint(ev){ const p=stage.createSVGPoint(); p.x=ev.clientX; p.y=ev.clientY; return p.matrixTransform(stage.getScreenCTM().inverse()); }
+function nodePointerDown(ev){ if(!editMode) return; const id=ev.currentTarget.dataset.id; if(ev.shiftKey){ toggleSelect(id); } else if(!selectedNodes.has(id)){ selectOnly(id); } if(linkMode){ startGhostFrom(id); return; } const ids=[...selectedNodes]; const pt=svgPoint(ev); const offsets={}; ids.forEach(nid=>{ const n=getNode(nid); offsets[nid]={dx:pt.x-n.x, dy:pt.y-n.y}; }); dragGroup={ids, offsets}; pushHistory(); window.addEventListener('pointermove',nodePointerMove); window.addEventListener('mousemove',nodePointerMove); window.addEventListener('pointerup',nodePointerUp,{once:true}); window.addEventListener('mouseup',nodePointerUp,{once:true}); }
+const SNAP=12, PUSH_GAP=16;
+function nodePointerMove(ev){ if(!dragGroup) return; const pt=svgPoint(ev); dragGroup.ids.forEach(id=>{ const n=getNode(id); if(!n) return; n.x=pt.x-dragGroup.offsets[id].dx; n.y=pt.y-dragGroup.offsets[id].dy; state.nodes.forEach(m=>{ if(m===n||m.type==='hub'||dragGroup.ids.includes(m.id)) return; if(Math.abs(n.x-m.x)<SNAP) n.x=m.x; if(Math.abs(n.y-m.y)<SNAP) n.y=m.y; if(Math.abs(n.x+n.w-(m.x+m.w))<SNAP) n.x=m.x+m.w-n.w; if(Math.abs(n.y+n.h-(m.y+m.h))<SNAP) n.y=m.y+m.h-n.h; if(!(n.x>m.x+m.w||n.x+n.w<m.x||n.y>m.y+m.h||n.y+n.h<m.y)){ n.y=m.y+m.h+PUSH_GAP; n.x=m.x+Math.round((m.w-n.w)/2); } }); const g=[...gNodes.children].find(x=>x.dataset.id===n.id); if(g) g.setAttribute('transform',`translate(${n.x},${n.y})`); }); updateEdgesAll(); if(ghost) updateGhostTo(ev); }
+function nodePointerUp(){ dragGroup=null; save(); window.removeEventListener('mousemove',nodePointerMove); window.removeEventListener('pointermove',nodePointerMove); }
+function nodeDblClick(ev){ if(!editMode) return; const id=ev.currentTarget.dataset.id; const n=getNode(id); editingNodeId=id; openDialog(n.name||'',n.title||''); }
+function nodeClick(ev){ if(!editMode) return; ev.stopPropagation(); const id=ev.currentTarget.dataset.id; if(ev.shiftKey){ toggleSelect(id); } else { selectOnly(id); } }
 
-/* ===== Перетаскивание и снэпы ===== */
-function svgPoint(ev){const p=stage.createSVGPoint();p.x=ev.clientX;p.y=ev.clientY;return p.matrixTransform(stage.getScreenCTM().inverse())}
-function onNodeDown(ev){
-  if(!editMode) return;
-  const id=ev.currentTarget.dataset.id;
-  if(ev.shiftKey){ toggleSelect(id) } else if(!selectedNodes.has(id)){ selectOnly(id) }
-  if(linkMode){ startGhostFrom(id); return }
-  const ids=[...selectedNodes];
-  const pt=svgPoint(ev);
-  const offsets={}; ids.forEach(nid=>{const n=getNode(nid); offsets[nid]={dx:pt.x-n.x,dy:pt.y-n.y}});
-  dragGroup={ids:ids,offsets:offsets};
-  window.addEventListener('pointermove',onNodeMove);
-  window.addEventListener('mousemove',onNodeMove);
-  window.addEventListener('pointerup',onNodeUp,{once:true});
-  window.addEventListener('mouseup',onNodeUp,{once:true});
-}
-function onNodeMove(ev){
-  if(!dragGroup) return;
-  const pt=svgPoint(ev);
-  dragGroup.ids.forEach(id=>{
-    const n=getNode(id); if(!n) return;
-    n.x=pt.x-dragGroup.offsets[id].dx; n.y=pt.y-dragGroup.offsets[id].dy;
-    // снэпы по отношению к другим узлам (кроме перетаскиваемых)
-    state.nodes.forEach(m=>{
-      if(m===n||m.type==='hub'||dragGroup.ids.includes(m.id)) return;
-      if(Math.abs(n.x-m.x)<SNAP) n.x=m.x;
-      if(Math.abs(n.y-m.y)<SNAP) n.y=m.y;
-      if(Math.abs(n.x+n.w - (m.x+m.w))<SNAP) n.x=m.x+m.w - n.w;
-      if(Math.abs(n.y+n.h - (m.y+m.h))<SNAP) n.y=m.y+m.h - n.h;
-      // если пересекаются — выталкиваем вниз и выравниваем по центру
-      if(!(n.x>m.x+m.w || n.x+n.w<m.x || n.y>m.y+m.h || n.y+n.h<m.y)){
-        n.y=m.y+m.h+PUSH_GAP;
-        n.x=m.x + Math.round((m.w-n.w)/2);
-      }
-    });
-    const g=[...gNodes.children].find(x=>x.dataset.id===n.id); if(g) g.setAttribute('transform','translate('+n.x+','+n.y+')');
-  });
-  updateEdgesAll(); if(ghost) updateGhost(ev);
-}
-function onNodeUp(){ dragGroup=null; save(); window.removeEventListener('pointermove',onNodeMove); window.removeEventListener('mousemove',onNodeMove) }
-function onNodeClick(ev){ if(!editMode) return; ev.stopPropagation(); const id=ev.currentTarget.dataset.id; if(ev.shiftKey){ toggleSelect(id) } else { selectOnly(id) } }
-function onNodeDbl(ev){ if(!editMode) return; const n=getNode(ev.currentTarget.dataset.id); editingNodeId=n.id; openDialog(n.name||'',n.title||'') }
+// ===== ORG drag/rename/delete =====
+orgG.addEventListener('mousedown',ev=>{ if(!editMode||(state.org&&state.org.visible===false)) return; const pt=svgPoint(ev); dragOrg={dx:pt.x-state.org.x, dy:pt.y-state.org.y}; orgSelected=true; pushHistory(); });
+window.addEventListener('mousemove',ev=>{ if(!dragOrg) return; const pt=svgPoint(ev); state.org.x=pt.x-dragOrg.dx; state.org.y=pt.y-dragOrg.dy; orgG.setAttribute('transform',`translate(${state.org.x},${state.org.y})`); });
+window.addEventListener('mouseup',()=>{ if(dragOrg){ dragOrg=null; save(); } });
+orgG.addEventListener('dblclick',()=>{ if(!editMode) return; const v=prompt('Название организации:', state.org.text||''); if(v!=null){ pushHistory(); state.org.text=v.trim()||'Организация'; draw(); save(); } });
 
-/* ===== Edge взаимодействие (в т.ч. начало связи от стрелки) ===== */
-function onEdgeClick(ev){
-  if(!editMode) return;
-  ev.stopPropagation();
+// ===== Связи / стрелка-призрак =====
+function startGhostFrom(srcId){ linkSourceId=srcId; modeBadge.textContent='Выберите целевую ячейку…'; const n=getNode(srcId); const x=centerX(n), y=centerY(n); ghost=svgEl('line',{x1:x,y1:y,x2:x,y2:y,class:'edge','marker-end':'url(#arrow)',stroke:'#3a9ad9','stroke-width':2,'pointer-events':'none'}); gEdges.appendChild(ghost); window.addEventListener('pointermove',updateGhostTo); window.addEventListener('mousemove',updateGhostTo); window.addEventListener('pointerup',ghostPointerUp,{once:true}); window.addEventListener('mouseup',ghostPointerUp,{once:true}); }
+function updateGhostTo(ev){ if(!ghost) return; const pt=svgPoint(ev); ghost.setAttribute('x2',pt.x); ghost.setAttribute('y2',pt.y); }
+function ghostPointerUp(ev){ if(!ghost) return; const el=document.elementFromPoint(ev.clientX,ev.clientY); const g=el&&el.closest? el.closest('g.node'):null; if(g){ const targetId=g.dataset.id; if(targetId!==linkSourceId){ if(edgeExists(linkSourceId,targetId)) alert('Такая связь уже есть.'); else if(wouldCycle(linkSourceId,targetId)) alert('Нельзя создать цикл.'); else { pushHistory(); state.edges.push({id:'e_'+uid(), from:linkSourceId, to:targetId}); draw(); save(); } } } cancelGhost(); }
+function cancelGhost(){ if(ghost){ ghost.remove(); ghost=null; } linkSourceId=null; window.removeEventListener('pointermove',updateGhostTo); window.removeEventListener('mousemove',updateGhostTo); }
+function edgeClick(ev){
+  if(!editMode) return; ev.stopPropagation();
+  // В режиме связи: начинаем от середины ЛЮБОЙ стрелки без перерисовки всего SVG
   if(linkMode){
-    const id=ev.currentTarget.dataset.id; const e=state.edges.find(x=>x.id===id); if(!e) return;
-    const hub=ensureHubForEdge(e); draw(); // чтобы позиции обновились
+    const id=ev.currentTarget.dataset.id;
+    const e=state.edges.find(x=>x.id===id); if(!e) return;
+    const hub=ensureHubForEdge(e);
+    // Позиционируем hub сразу (без draw()), чтобы старая ветка не "мигала"
+    const a=getNode(e.from), b=getNode(e.to);
+    if(a&&b){ hub.x=(centerX(a)+centerX(b))/2; hub.y=(centerY(a)+centerY(b))/2; }
     startGhostFrom(hub.id);
     return;
   }
-  clearSel(); selectedEdgeId=ev.currentTarget.dataset.id; ev.currentTarget.classList.add('selected');
-}
-
-/* ===== Рисование связи ===== */
-function startGhostFrom(id){
-  linkSourceId=id; modeBadge.textContent='Режим: связь';
-  const n=getNode(id); const x=centerX(n), y=centerY(n);
-  const el=document.createElementNS('http://www.w3.org/2000/svg','line');
-  el.setAttribute('x1',String(x)); el.setAttribute('y1',String(y));
-  el.setAttribute('x2',String(x)); el.setAttribute('y2',String(y));
-  el.setAttribute('class','edge'); el.setAttribute('stroke','#3a9ad9'); el.setAttribute('stroke-width','2');
-  el.setAttribute('marker-end','url(#arrow)'); el.style.pointerEvents='none';
-  ghost=el; gEdges.appendChild(ghost);
-  window.addEventListener('pointermove',updateGhost);
-  window.addEventListener('mousemove',updateGhost);
-  window.addEventListener('pointerup',finishGhost,{once:true});
-  window.addEventListener('mouseup',finishGhost,{once:true});
-}
-function updateGhost(ev){ if(!ghost) return; const p=stage.createSVGPoint(); p.x=ev.clientX; p.y=ev.clientY; const pt=p.matrixTransform(stage.getScreenCTM().inverse()); ghost.setAttribute('x2',String(pt.x)); ghost.setAttribute('y2',String(pt.y)) }
-function finishGhost(ev){
-  if(!ghost) return;
-  const el=document.elementFromPoint(ev.clientX,ev.clientY);
-  const g=el&&el.closest?el.closest('g.node'):null;
-  if(g){
-    const toId=g.dataset.id;
-    if(toId!==linkSourceId){
-      if(edgeExists(linkSourceId,toId)) alert('Такая связь уже есть.');
-      else if(wouldCycle(linkSourceId,toId)) alert('Нельзя создавать цикл.');
-      else { state.edges.push({id:'e_'+uid(),from:linkSourceId,to:toId}); draw(); save(); }
-    }
+  // В режиме удаления связей — удалить кликнутую
+  if(linkDeleteMode){
+    const id=ev.currentTarget.dataset.id; pushHistory();
+    state.edges = state.edges.filter(e=>e.id!==id); draw(); save(); return;
   }
-  if(ghost){ ghost.remove(); ghost=null }
-  linkSourceId=null;
+  // Обычное выделение
+  const sel=gEdges.querySelector('.edge.selected');
+  if(sel && sel!==ev.currentTarget) sel.classList.remove('selected');
+  ev.currentTarget.classList.toggle('selected');
+  selectedEdgeId = ev.currentTarget.dataset.id;
 }
 
-/* ===== ORG перетаскивание / редактирование / удаление ===== */
-orgG.addEventListener('mousedown',ev=>{
-  if(!editMode||!(state.org&&state.org.visible)) return;
-  if(ev.detail===2){ return } // двойной клик пойдёт на rename
-  const p=stage.createSVGPoint(); p.x=ev.clientX; p.y=ev.clientY;
-  const pt=p.matrixTransform(stage.getScreenCTM().inverse());
-  dragOrg={dx:pt.x-state.org.x,dy:pt.y-state.org.y}; orgSelected=true;
-});
-window.addEventListener('mousemove',ev=>{
-  if(!dragOrg) return;
-  const p=stage.createSVGPoint(); p.x=ev.clientX; p.y=ev.clientY;
-  const pt=p.matrixTransform(stage.getScreenCTM().inverse());
-  state.org.x=pt.x-dragOrg.dx; state.org.y=pt.y-dragOrg.dy;
-  orgG.setAttribute('transform','translate('+state.org.x+','+state.org.y+')');
-});
-window.addEventListener('mouseup',()=>{ if(dragOrg){ dragOrg=null; save() } });
-orgG.addEventListener('dblclick',()=>{
-  if(!editMode) return;
-  const v=prompt('Название организации:',state.org.text||'');
-  if(v!=null){ state.org.text=v.trim()||'Организация'; draw(); save() }
-});
+// ===== Экспорт / Импорт =====
+function exportJSON(){ const data={ org:state.org, nodes:state.nodes, edges:state.edges }; const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='orgchart.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+function importJSON(){ const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json'; inp.onchange=()=>{ const f=inp.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ const obj=JSON.parse(r.result); if(!obj||!Array.isArray(obj.nodes)||!Array.isArray(obj.edges)) throw new Error('Неверный формат'); pushHistory(); state.org=obj.org||{x:960,y:40,text:'Организация',visible:true}; state.nodes=obj.nodes.map(n=>{ const s=computeNodeSize(n.name||'',n.title||''); return { id:n.id||uid(), name:n.name||'', title:n.title||'', x:+n.x||0, y:+n.y||0, w:+n.w||s.w, h:+n.h||s.h, fill:n.fill||'#101735', type:n.type||undefined, anchors:n.anchors||undefined, locked:n.locked||undefined }; }); state.edges=obj.edges.map(e=>({id:e.id||('e_'+uid()), from:e.from, to:e.to})).filter(e=>e.from&&e.to); draw(); save(); }catch(err){ alert('Ошибка чтения JSON: '+err.message); } }; r.readAsText(f); }; inp.click(); }
 
-/* ===== Верхняя панель ===== */
-editBtn.addEventListener('click',()=>{
-  editMode=!editMode;
-  tools.style.display=editMode?'flex':'none';
-  editBtn.textContent=editMode?'✅ Готово':'✏️ Редактирование';
-  linkMode=false; if(ghost){ ghost.remove(); ghost=null } ; modeBadge.textContent='Режим: выбор';
-});
-pngBtn.addEventListener('click',exportPNG);
-saveBtn.addEventListener('click',exportJSON);
-loadBtn.addEventListener('click',importJSON);
+// ===== PNG =====
+function exportPNG(){ const bbox=stage.getBBox(); const m=24; const w=Math.max(600,bbox.width+m*2); const h=Math.max(300,bbox.height+m*2); const clone=stage.cloneNode(true); clone.setAttribute('viewBox',`${bbox.x-m} ${bbox.y-m} ${w} ${h}`); clone.setAttribute('width',w); clone.setAttribute('height',h); clone.setAttribute('style','background:#ffffff'); const svgData=new XMLSerializer().serializeToString(clone); const svgBlob=new Blob([svgData],{type:'image/svg+xml;charset=utf-8'}); const url=URL.createObjectURL(svgBlob); const img=new Image(); img.onload=()=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; const ctx=c.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0); URL.revokeObjectURL(url); c.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='orgchart.png'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); },'image/png'); }; img.src=url; }
 
-addNodeBtn.addEventListener('click',()=>{ if(!editMode){alert('Включите режим редактирования.');return} editingNodeId=null; openDialog('','') });
-editNodeBtn.addEventListener('click',()=>{
-  if(!editMode){alert('Включите режим редактирования.');return}
-  const ids=[...selectedNodes];
-  if(ids.length!==1){ alert('Выберите одну ячейку.'); return }
-  const n=getNode(ids[0]); editingNodeId=n.id; openDialog(n.name||'',n.title||'');
-});
-linkBtn.addEventListener('click',()=>{ if(!editMode){alert('Включите режим редактирования.');return} linkMode=!linkMode; if(!linkMode&&ghost){ghost.remove();ghost=null} ; modeBadge.textContent=linkMode?'Режим: связь':'Режим: выбор' });
+// ===== Прочее =====
+stage.addEventListener('click',()=>{ if(!editMode) return; clearSelection(); if(linkMode&&ghost){ cancelGhost(); modeBadge.textContent='Режим: связь'; } const es=gEdges.querySelector('.edge.selected'); if(es) es.classList.remove('selected'); });
+window.addEventListener('keydown',e=>{ if(!editMode) return; if(e.key==='Delete'){ deleteBtn.click(); } if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ undo(); } });
 
-// объединённое удаление
-deleteBtn.addEventListener('click',()=>{
-  if(!editMode){alert('Включите режим редактирования.');return}
-  if(orgSelected){ state.org.visible=false; orgSelected=false; draw(); save(); return }
-  if(selectedNodes.size>0){ [...selectedNodes].forEach(id=>removeNode(id)); clearSel(); draw(); save(); return }
-  if(selectedEdgeId){ state.edges=state.edges.filter(e=>e.id!==selectedEdgeId); selectedEdgeId=null; draw(); save(); return }
-  alert('Выберите ячейку, связь или заголовок организации.')
-});
-
-smallerBtn.addEventListener('click',()=>{
-  if(!editMode){alert('Включите режим редактирования.');return}
-  if(selectedNodes.size===0){alert('Выберите ячейки.');return}
-  selectedNodes.forEach(id=>{const n=getNode(id); n.w=Math.max(MIN_W,Math.round(n.w/1.12)); n.h=Math.max(MIN_H,Math.round(n.h/1.12)); n.fs=Math.max(FS_MIN,(n.fs||1)/1.08)});
-  draw(); save();
-});
-biggerBtn.addEventListener('click',()=>{
-  if(!editMode){alert('Включите режим редактирования.');return}
-  if(selectedNodes.size===0){alert('Выберите ячейки.');return}
-  selectedNodes.forEach(id=>{const n=getNode(id); n.w=Math.round(n.w*1.12); n.h=Math.round(n.h*1.12); n.fs=Math.min(FS_MAX,(n.fs||1)*1.08)});
-  draw(); save();
-});
-autoLayoutBtn.addEventListener('click',autoLayout);
-
-palette.forEach(btn=>btn.addEventListener('click',()=>{
-  if(!editMode){alert('Включите режим редактирования.');return}
-  if(selectedNodes.size===0){alert('Выберите ячейки.');return}
-  const color=btn.getAttribute('data-color')||'#101735';
-  selectedNodes.forEach(id=>{const n=getNode(id); if(n) n.fill=color});
-  draw(); save();
-}));
-
-/* ===== Диалог ===== */
-function openDialog(name,title){ dlg.style.display='flex'; inpName.value=name||''; inpTitle.value=title||''; setTimeout(()=>inpName.focus(),0) }
-dlgCancel.addEventListener('click',()=>{ dlg.style.display='none' });
-dlgOk.addEventListener('click',()=>{
-  const name=inpName.value.trim(); if(!name){alert('Введите ФИО');return}
-  const title=inpTitle.value.trim();
-  if(editingNodeId){ const n=getNode(editingNodeId); n.name=name; n.title=title }
-  else { state.nodes.push({id:uid(),name:name,title:title,x:200+Math.random()*200,y:160+Math.random()*120,w:200,h:64,fs:1,fill:'#101735'}) }
-  dlg.style.display='none'; draw(); save();
-});
-
-/* ===== Автовыравнивание (по уровням) ===== */
-function autoLayout(){
-  const indeg=new Map(); state.nodes.forEach(n=>{ if(n.type!=='hub') indeg.set(n.id,0) });
-  state.edges.forEach(e=>{ const t=getNode(e.to); if(t&&t.type!=='hub') indeg.set(e.to,(indeg.get(e.to)||0)+1) });
-
-  const ch=new Map();
-  state.edges.forEach(e=>{ const arr=ch.get(e.from)||[]; arr.push(e.to); ch.set(e.from,arr) });
-
-  const level=new Map(); const q=[];
-  state.nodes.forEach(n=>{ if(n.type==='hub') return; if((indeg.get(n.id)||0)===0){ level.set(n.id,1); q.push(n.id) } });
-  while(q.length){ const v=q.shift(); const lv=level.get(v)||1; (ch.get(v)||[]).forEach(u=>{ if(!level.has(u)){ level.set(u,lv+1); q.push(u) } }) }
-
-  const groups=new Map();
-  state.nodes.forEach(n=>{ if(n.type==='hub') return; const lv=level.get(n.id)||1; const a=groups.get(lv)||[]; a.push(n); groups.set(lv,a) });
-
-  const W=2400, startY=140, rowGap=170, colGap=40;
-  Array.from(groups.keys()).sort((a,b)=>a-b).forEach((lv,i)=>{
-    const row=(groups.get(lv)||[]).sort((a,b)=>a.x-b.x);
-    const sumW=row.reduce((s,n)=>s+n.w,0);
-    const total=sumW+colGap*Math.max(0,row.length-1);
-    let x=(W-total)/2; const y=startY+i*rowGap;
-    row.forEach(n=>{ n.x=Math.round(x); n.y=Math.round(y); x+=n.w+colGap });
-  });
-  draw(); save();
-}
-
-/* ===== Экспорт/импорт ===== */
-function exportJSON(){
-  const data={org:state.org,nodes:state.nodes,edges:state.edges};
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='orgchart.json';
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-}
-function importJSON(){
-  const inp=document.createElement('input');
-  inp.type='file'; inp.accept='application/json';
-  inp.onchange=()=>{
-    const f=inp.files&&inp.files[0]; if(!f) return;
-    const r=new FileReader();
-    r.onload=()=>{
-      try{
-        const o=JSON.parse(r.result);
-        if(!o||!Array.isArray(o.nodes)||!Array.isArray(o.edges)) throw new Error('Неверный формат');
-        state.org=o.org||{x:960,y:40,text:'Организация',visible:true};
-        state.nodes=o.nodes.map(n=>({
-          id:n.id||uid(), name:n.name||'', title:n.title||'',
-          x:+n.x||0, y:+n.y||0, w:+n.w||200, h:+n.h||64,
-          fs:(typeof n.fs==='number'?n.fs:1), fill:n.fill||'#101735',
-          type:n.type||undefined, anchors:n.anchors||undefined, locked:n.locked||undefined
-        }));
-        state.edges=o.edges.map(e=>({id:e.id||('e_'+uid()),from:e.from,to:e.to})).filter(e=>e.from&&e.to);
-        draw(); save();
-      }catch(err){ alert('Ошибка чтения JSON: '+err.message) }
-    };
-    r.readAsText(f);
-  };
-  inp.click();
-}
-
-/* ===== Экспорт PNG ===== */
-function exportPNG(){
-  const bb=stage.getBBox(), m=24, w=Math.max(600,bb.width+m*2), h=Math.max(300,bb.height+m*2);
-  const clone=stage.cloneNode(true);
-  clone.setAttribute('viewBox',`${bb.x-m} ${bb.y-m} ${w} ${h}`);
-  clone.setAttribute('width',String(w));
-  clone.setAttribute('height',String(h));
-  const url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)],{type:'image/svg+xml;charset=utf-8'}));
-  const img=new Image();
-  img.onload=()=>{
-    const c=document.createElement('canvas'); c.width=w; c.height=h;
-    const ctx=c.getContext('2d');
-    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,w,h);
-    ctx.drawImage(img,0,0);
-    URL.revokeObjectURL(url);
-    c.toBlob(b=>{
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(b);
-      a.download='orgchart.png';
-      a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-    },'image/png');
-  };
-  img.src=url;
-}
-
-/* ===== Прочее ===== */
-stage.addEventListener('click',()=>{ if(!editMode) return; clearSel(); selectedEdgeId=null; if(ghost){ ghost.remove(); ghost=null } });
-window.addEventListener('keydown',e=>{ if(!editMode) return; if(e.key==='Delete') deleteBtn.click() });
-
-/* Старт */
+// Старт
 draw();
 </script>
 </body>
