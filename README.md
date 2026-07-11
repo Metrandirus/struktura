@@ -1,1 +1,1 @@
-https://<Metrandirus>.github.io/struktura/
+https://Metrandirus.github.io/struktura/
