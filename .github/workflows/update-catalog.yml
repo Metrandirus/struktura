@@ -1,0 +1,41 @@
+name: Обновление каталога (остатки и цены)
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run update script
+        env:
+          CATALOG_EXPORT_URL: ${{ secrets.CATALOG_EXPORT_URL }}
+        run: python3 scripts/update_catalog.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "catalog-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add voltum/data/*.json
+          if git diff --cached --quiet; then
+            echo "Изменений в каталоге нет."
+          else
+            git commit -m "Автообновление каталога: $(date -u '+%Y-%m-%d')"
+            git push
+          fi
