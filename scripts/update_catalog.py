@@ -5,7 +5,7 @@
 читает сайт (voltum/data/voltum-products.json, voltum/data/werkel-products.json).
 
 Запускается вручную:
-    CATALOG_EXPORT_URL="https://opt.lu.ru/export/..." python3 scripts/update_catalog.py
+   
 
 Или автоматически раз в неделю через GitHub Actions (см. .github/workflows/update-catalog.yml),
 где ссылка хранится в секрете репозитория CATALOG_EXPORT_URL — потому что в ней
