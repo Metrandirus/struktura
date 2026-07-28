@@ -132,13 +132,23 @@ def voltum_color(article: str, name: str):
     return None
 
 
-def fix_switch_category(df: pd.DataFrame, name_col: str, type_col: str) -> pd.DataFrame:
+def fix_switch_category(df: pd.DataFrame, art_col: str, name_col: str, type_col: str) -> pd.DataFrame:
     """У поставщика 'Перекрестный/Проходной переключатель' иногда попадает
-    в категорию 'Выключатели' — переносим в 'Переключатели'."""
-    mask = (
-        df[name_col].str.contains("Перекрестный переключатель|Проходной переключатель", case=False, na=False, regex=True)
-        & (df[type_col] != "Переключатели")
-    )
+    в категорию 'Выключатели' — переносим в 'Переключатели'.
+
+    Основной способ — по коду артикула: у Voltum S70 формат VLS[категория][подтип][цвет],
+    где подтип 03/04 = проходной переключатель, 05 = перекрёстный. Он надёжен независимо
+    от того, есть ли в выгрузке полное описание товара или только короткое "Выключатель S70 VLSxxxxxx"
+    (в еженедельной автовыгрузке названия обычно короткие, так что раньше эта проверка
+    молча не срабатывала). Плюс запасной вариант — по тексту названия, если он есть.
+    """
+    by_code = df[art_col].astype(str).str.match(r"^VLS\d{2}(03|04|05)\d{2}$")
+    by_name = df[name_col].str.contains("Перекрестный переключатель|Проходной переключатель", case=False, na=False, regex=True)
+    # ограничиваем текущей категорией "Выключатели" — иначе по чистому совпадению
+    # цифр в артикуле (03/04/05 на этих позициях) под правило случайно попадают
+    # совсем другие товары (розетки, рамки и т.д.), у которых те же цифры значат
+    # совсем другое.
+    mask = (by_code | by_name) & (df[type_col] == "Выключатели")
     df.loc[mask, type_col] = "Переключатели"
     return df
 
@@ -269,7 +279,7 @@ def main():
 
     # общее переименование категорий
     df[type_col] = df[type_col].replace({"Диммеры": "Светорегуляторы"})
-    df = fix_switch_category(df, name_col, type_col)
+    df = fix_switch_category(df, art_col, name_col, type_col)
 
     os.makedirs(DATA_DIR, exist_ok=True)
     summary = {}
