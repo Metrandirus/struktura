@@ -12,15 +12,23 @@
     --bg:#1c1b1a; --surface:#242220; --surface2:#2b2926; --surface3:#332f2b;
     --border:#3d3934; --copper:#c1713d; --copper-bright:#e08a52;
     --green:#5fae7c; --red:#c1543d; --text:#efece5; --text-dim:#aca394; --text-mute:#726b5f;
+    --header-grad:#211f1d; --shadow:rgba(0,0,0,.35);
+  }
+  html[data-theme="light"]{
+    --bg:#f4f1ea; --surface:#ffffff; --surface2:#f1ece1; --surface3:#e8e0cf;
+    --border:#ded4bd; --copper:#b8632e; --copper-bright:#d97a3f;
+    --green:#3f8f5f; --red:#b8432e; --text:#2a2620; --text-dim:#5c5548; --text-mute:#8a8172;
+    --header-grad:#fbf9f4; --shadow:rgba(60,50,30,.12);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
-  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;
+    transition:background-color .2s, color .2s;}
   .mono{font-family:'JetBrains Mono',monospace;}
   h1,h2,h3,.disp{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.03em;}
 
   header.top{display:flex;align-items:center;gap:16px;padding:16px 24px;border-bottom:1px solid var(--border);
-    background:linear-gradient(180deg,#211f1d,#1c1b1a);position:sticky;top:0;z-index:30;}
+    background:linear-gradient(180deg,var(--header-grad),var(--bg));position:sticky;top:0;z-index:30;}
   .plug{width:34px;height:34px;flex:none;border-radius:6px;background:var(--surface3);border:1px solid var(--border);
     display:flex;align-items:center;justify-content:center;}
   .plug svg{width:20px;height:20px;}
@@ -29,6 +37,18 @@
   header.top .badge{margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-mute);
     border:1px solid var(--border);border-radius:20px;padding:5px 12px;white-space:nowrap;}
   header.top .badge + .badge{margin-left:8px;}
+
+  .theme-toggle{
+    width:34px;height:34px;flex:none;border-radius:8px;margin-left:12px;position:relative;
+    background:var(--surface3);border:1px solid var(--border);color:var(--text-dim);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.15s;
+  }
+  .theme-toggle:hover{border-color:var(--copper);color:var(--text);}
+  .theme-toggle svg{width:18px;height:18px;position:absolute;transition:opacity .2s, transform .2s;}
+  .theme-toggle .icon-sun{opacity:0;transform:scale(.6) rotate(-90deg);}
+  .theme-toggle .icon-moon{opacity:1;transform:scale(1) rotate(0);}
+  html[data-theme="light"] .theme-toggle .icon-sun{opacity:1;transform:scale(1) rotate(0);}
+  html[data-theme="light"] .theme-toggle .icon-moon{opacity:0;transform:scale(.6) rotate(90deg);}
   header.top .badge:empty{display:none;}
   .badge b{color:var(--green);}
 
@@ -215,6 +235,10 @@
     <p class="subtitle">Электрофурнитура и трековые системы — фото, артикулы и цены, сборка КП</p>
   </div>
   <div class="badge" id="updatedBadge"></div>
+  <button class="theme-toggle" id="themeToggle" title="Светлая/тёмная тема" aria-label="Переключить тему">
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.5M12 19v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2.5 12H5M19 12h2.5M4.2 19.8L6 18M18 6l1.8-1.8"/></svg>
+  </button>
   <div class="badge"><b id="cartCountBadge">0</b> в КП · <b id="cartSumBadge">0 ₽</b></div>
 </header>
 
@@ -1205,11 +1229,16 @@ async function loadData(){
     VOLTUM_PRODUCTS = await vRes.json();
     WERKEL_PRODUCTS = await wRes.json();
 
-    // track-products.json and voltum-extra.json are optional — the site works fine without them yet
+    // track-products.json, voltum-extra.json and track-extra.json are optional —
+    // the site works fine without them yet
     TRACK_PRODUCTS = await fetchJsonSafe('data/track-products.json', []);
     const extras = await fetchJsonSafe('data/voltum-extra.json', []);
     const existingArts = new Set(VOLTUM_PRODUCTS.map(p=>p.a));
     extras.forEach(p=>{ if(!existingArts.has(p.a)) VOLTUM_PRODUCTS.push(p); });
+
+    const trackExtras = await fetchJsonSafe('data/track-extra.json', []);
+    const existingTrackArts = new Set(TRACK_PRODUCTS.map(p=>p.a));
+    trackExtras.forEach(p=>{ if(!existingTrackArts.has(p.a)) TRACK_PRODUCTS.push(p); });
 
     ALL_PRODUCTS = VOLTUM_PRODUCTS.concat(WERKEL_PRODUCTS, TRACK_PRODUCTS, CUSTOM_PRODUCTS);
     renderUpdatedBadge();
@@ -1231,6 +1260,25 @@ async function renderUpdatedBadge(){
 }
 
 loadData();
+
+/* ---- theme toggle (светлая/тёмная) ---- */
+(function initTheme(){
+  let saved = null;
+  try{ saved = localStorage.getItem('theme'); }catch(e){ /* privacy mode / disabled storage — fall back to dark */ }
+  if(saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+
+  const btn = document.getElementById('themeToggle');
+  btn.addEventListener('click', ()=>{
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    if(isLight){
+      document.documentElement.removeAttribute('data-theme');
+      try{ localStorage.setItem('theme', 'dark'); }catch(e){}
+    } else {
+      document.documentElement.setAttribute('data-theme', 'light');
+      try{ localStorage.setItem('theme', 'light'); }catch(e){}
+    }
+  });
+})();
 </script>
 </body>
 </html>
