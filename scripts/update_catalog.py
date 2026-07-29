@@ -132,6 +132,74 @@ def voltum_color(article: str, name: str):
     return None
 
 
+VOLTUM_CLAV_WORD = {"01": "одноклавишный", "02": "двухклавишный", "03": "трёхклавишный", "04": "четырёхклавишный"}
+
+# Расшифровка кода артикула Voltum S70: VLS[категория][подтип][цвет].
+# Заполнено только там, где смысл подтипа подтверждён (по прошлым выгрузкам с
+# полными названиями и/или устойчивой ценовой закономерностью — см. README).
+VOLTUM_SUBTYPE_NAMES = {
+    ("Выключатели", "01"): "Выключатель",
+    ("Выключатели", "02"): "Выключатель с подсветкой",
+    ("Переключатели", "03"): "Проходной переключатель",
+    ("Переключатели", "04"): "Проходной переключатель с подсветкой",
+    ("Переключатели", "05"): "Перекрёстный переключатель",
+}
+# Розетки: категория (2-я пара цифр после VLS) переключает "линейку", подтип -
+# конкретный вариант внутри неё.
+VOLTUM_SOCKET_NAMES = {
+    ("04", "01"): "Розетка с заземлением",
+    ("04", "02"): "Розетка с заземлением и защитными шторками",
+    ("04", "03"): "Розетка с заземлением, защитными шторками и крышкой (IP44)",
+    # 04/05 — не подтверждено напрямую, только по резкому росту цены в 4-6 раз
+    # относительно 01-03 (типичная разница для розеток с USB) — помечаем как
+    # предположительное, легко скорректировать при уточнении.
+    ("04", "04"): "Розетка с заземлением и USB (A+A)",
+    ("04", "05"): "Розетка с заземлением и USB (A+C)",
+    ("06", "01"): "Розетка интернет RJ45",
+    ("06", "02"): "Розетка интернет RJ45 (двойная)",
+    ("06", "03"): "Розетка акустическая (4 колонки)",
+    ("06", "04"): "Розетка ТВ (антенная)",
+    ("06", "07"): "Розетка ТВ + интернет RJ45",
+}
+
+
+def voltum_full_name(article: str, vid: str, fallback_name: str):
+    """Пытается собрать описательное название вместо общего "Тип S70 VLSxxxx"
+    по коду артикула. Возвращает fallback_name без изменений, если код не
+    попадает ни в одну из подтверждённых схем — лучше оставить как есть,
+    чем придумать неверное название."""
+    m = re.match(r"^VLS(M?)(\d{2})(\d{2})\d{2}$", str(article))
+    if not m:
+        return fallback_name
+    metal, cc, ss = m.groups()
+    suffix = " Metal" if metal else ""
+
+    if vid == "Рамки" and cc == "10":
+        try:
+            posts = int(ss)
+        except ValueError:
+            return fallback_name
+        word = "пост" if posts == 1 else ("поста" if 2 <= posts <= 4 else "постов")
+        return f"Рамка S70{suffix} на {posts} {word}"
+
+    if vid == "Розетки":
+        key = (cc, ss)
+        if key in VOLTUM_SOCKET_NAMES:
+            return f"{VOLTUM_SOCKET_NAMES[key]} S70{suffix}"
+
+    base = VOLTUM_SUBTYPE_NAMES.get((vid, ss))
+    if base and vid in ("Выключатели", "Переключатели"):
+        clav = VOLTUM_CLAV_WORD.get(cc)
+        if clav:
+            return f"{base} {clav} S70{suffix}"
+        return f"{base} S70{suffix}"
+
+    if vid == "Выключатели" and cc == "02" and ss == "07":
+        return f"Выключатель для жалюзи S70{suffix}"
+
+    return fallback_name
+
+
 def fix_switch_category(df: pd.DataFrame, art_col: str, name_col: str, type_col: str) -> pd.DataFrame:
     """У поставщика 'Перекрестный/Проходной переключатель' иногда попадает
     в категорию 'Выключатели' — переносим в 'Переключатели'.
@@ -232,6 +300,7 @@ def build_records(df: pd.DataFrame, brand_key: str, name_col, type_col, art_col,
 
         if brand_key == "voltum":
             color = voltum_color(article, name)
+            name = voltum_full_name(article, vid, name)
         else:
             color = r[series_col] if series_col and pd.notna(r.get(series_col)) else None
 
