@@ -11,5 +11,19 @@
     "c": null,
     "sys": "magnetic",
     "volt": 48
+  },
+  {
+    "a": "MT0203-3B",
+    "b": "track",
+    "br": "MyFar",
+    "t": "Шинопроводы",
+    "n": "Шинопровод магнитный встраиваемый в ПВХ 3 метра 48V MyFar МагБас",
+    "p": 13995,
+    "st": null,
+    "img": "https://lu.ru/xl/m/y/f/myfar_mt0203-3b.jpg",
+    "c": null,
+    "sys": "magnetic",
+    "volt": 48,
+    "len": 300
   }
 ]
