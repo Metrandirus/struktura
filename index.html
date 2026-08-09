@@ -146,6 +146,22 @@
   .summary{border-left:1px solid var(--border);background:var(--surface);padding:20px 18px;
     position:sticky;top:175px;height:fit-content;max-height:calc(100vh - 175px);overflow-y:auto;}
   .summary h2{font-size:13px;color:var(--text-mute);letter-spacing:.08em;margin:0 0 12px;}
+  .summary-head-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:0;}
+  .summary-head-row h2{margin-bottom:0;}
+
+  .history-panel{margin:10px 0 16px;border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--surface2);
+    max-height:280px;overflow-y:auto;}
+  .history-empty{color:var(--text-mute);font-size:12px;text-align:center;padding:14px 4px;}
+  .history-item{display:flex;flex-direction:column;gap:4px;padding:9px 8px;border-radius:8px;border:1px solid var(--border);
+    background:var(--surface);margin-bottom:7px;}
+  .history-item:last-child{margin-bottom:0;}
+  .history-item .h-top{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--text);}
+  .history-item .h-date{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text-mute);}
+  .history-item .h-meta{font-size:11px;color:var(--text-mute);}
+  .history-item .h-actions{display:flex;gap:6px;margin-top:3px;}
+  .history-item .h-actions .btn-tiny{flex:1;text-align:center;}
+  .history-item .h-actions .btn-tiny.danger:hover{border-color:var(--red);color:var(--red);}
+
   .kp-fields{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
   .kp-fields input{width:100%;}
   .kp-fields label{font-size:10.5px;text-transform:uppercase;color:var(--text-mute);letter-spacing:.05em;margin-bottom:3px;display:block;}
@@ -280,7 +296,11 @@
   </main>
 
   <aside class="summary">
-    <h2>Коммерческое предложение</h2>
+    <div class="summary-head-row">
+      <h2>Коммерческое предложение</h2>
+      <button class="btn-tiny" id="historyToggleBtn">История КП</button>
+    </div>
+    <div id="historyPanel" class="history-panel" style="display:none;"></div>
     <div class="kp-fields">
       <div><label>Клиент / объект</label><input type="text" id="kpClient" placeholder="ООО «Ромашка», офис на Тверской"></div>
       <div><label>Менеджер</label><input type="text" id="kpManager" placeholder="Иван Иванов"></div>
@@ -779,6 +799,113 @@ function cartItemHtml(key, qty){
   </div>`;
 }
 
+/* ---- история КП (локально в этом браузере, без логина — см. README) ---- */
+const KP_HISTORY_KEY = 'kp_history_v1';
+const KP_HISTORY_LIMIT = 50;
+
+function loadHistoryList(){
+  try{
+    const raw = localStorage.getItem(KP_HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function saveHistoryList(list){
+  try{ localStorage.setItem(KP_HISTORY_KEY, JSON.stringify(list)); }
+  catch(e){ alert('Не удалось сохранить историю — возможно, в браузере отключено хранилище (приватный режим?).'); }
+}
+
+function saveCurrentToHistory(){
+  if(Object.keys(state.cart).length === 0){ alert('КП пустое — нечего сохранять.'); return; }
+  const client = document.getElementById('kpClient').value.trim();
+  const manager = document.getElementById('kpManager').value.trim();
+  const {grandTotal} = computeCartTotals();
+
+  // товары "своих" позиций храним прямо в записи истории — CUSTOM_PRODUCTS
+  // живёт только в памяти вкладки и пропадёт при перезагрузке страницы
+  const usedCustomArts = new Set(Object.keys(state.cart).map(k=>parseCartKey(k).article).filter(a=>a.startsWith('CUSTOM-')));
+  const customSnapshot = CUSTOM_PRODUCTS.filter(p=>usedCustomArts.has(p.a));
+
+  const entry = {
+    id: 'kp' + Date.now(),
+    savedAt: new Date().toLocaleString('ru-RU'),
+    client, manager,
+    total: grandTotal,
+    itemCount: Object.values(state.cart).reduce((a,b)=>a+b,0),
+    cart: state.cart,
+    rooms: state.rooms,
+    itemDiscounts: state.itemDiscounts,
+    orderDiscount: state.orderDiscount,
+    customProducts: customSnapshot,
+  };
+
+  const list = loadHistoryList();
+  list.unshift(entry);
+  while(list.length > KP_HISTORY_LIMIT) list.pop();
+  saveHistoryList(list);
+  renderHistoryPanel();
+  document.getElementById('historyPanel').style.display = '';
+}
+
+function loadHistoryEntry(id){
+  const list = loadHistoryList();
+  const entry = list.find(e=>e.id===id);
+  if(!entry) return;
+  if(Object.keys(state.cart).length > 0){
+    if(!confirm('Текущее КП будет заменено сохранённым из истории. Продолжить?')) return;
+  }
+  (entry.customProducts||[]).forEach(p=>{
+    if(!CUSTOM_PRODUCTS.find(x=>x.a===p.a)) CUSTOM_PRODUCTS.push(p);
+  });
+  ALL_PRODUCTS = VOLTUM_PRODUCTS.concat(WERKEL_PRODUCTS, TRACK_PRODUCTS, CUSTOM_PRODUCTS);
+  state.cart = entry.cart || {};
+  state.rooms = entry.rooms || [];
+  state.itemDiscounts = entry.itemDiscounts || {};
+  state.orderDiscount = entry.orderDiscount || 0;
+  state.activeRoomId = null;
+  document.getElementById('kpClient').value = entry.client || '';
+  document.getElementById('kpManager').value = entry.manager || '';
+  render();
+}
+
+function deleteHistoryEntry(id){
+  if(!confirm('Удалить это КП из истории безвозвратно?')) return;
+  const list = loadHistoryList().filter(e=>e.id!==id);
+  saveHistoryList(list);
+  renderHistoryPanel();
+}
+
+function renderHistoryPanel(){
+  const el = document.getElementById('historyPanel');
+  const list = loadHistoryList();
+  const btn = document.getElementById('historyToggleBtn');
+  if(btn) btn.textContent = 'История КП' + (list.length ? ` (${list.length})` : '');
+  if(list.length === 0){
+    el.innerHTML = `<div class="history-empty">Пока ничего не сохранено — нажмите «Сохранить в историю» под списком товаров.</div>`;
+    return;
+  }
+  el.innerHTML = list.map(e=>{
+    const who = [e.client, e.manager].filter(Boolean).join(' · ');
+    return `<div class="history-item">
+      <div class="h-top"><span>${who ? escapeHtml(who) : 'Без клиента'}</span><span class="h-date">${escapeHtml(e.savedAt)}</span></div>
+      <div class="h-meta">${e.itemCount} поз. · ${fmt(e.total)} ₽</div>
+      <div class="h-actions">
+        <button class="btn-tiny" data-load="${e.id}">Загрузить</button>
+        <button class="btn-tiny danger" data-del="${e.id}">Удалить</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-load]').forEach(b=>b.addEventListener('click', ()=>loadHistoryEntry(b.dataset.load)));
+  el.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', ()=>deleteHistoryEntry(b.dataset.del)));
+}
+
+document.getElementById('historyToggleBtn').addEventListener('click', ()=>{
+  const el = document.getElementById('historyPanel');
+  const willShow = el.style.display === 'none';
+  el.style.display = willShow ? '' : 'none';
+  if(willShow) renderHistoryPanel();
+});
+renderHistoryPanel();
+
 function renderCart(){
   renderRoomManager();
 
@@ -844,6 +971,7 @@ function renderCart(){
     <button class="btn full" id="makeKpNoArtBtn">Подготовить КП (без артикулов)</button>
     <button class="btn full" id="makeKpNoPriceBtn">Подготовить КП (без цен)</button>
     <button class="btn full" id="exportExcelBtn">Скачать КП в Excel (.xlsx)</button>
+    <button class="btn full" id="saveHistoryBtn">💾 Сохранить в историю</button>
     <button class="btn full" id="clearCartBtn">Очистить список</button>`;
 
   body.innerHTML = html;
@@ -897,6 +1025,7 @@ function renderCart(){
   document.getElementById('makeKpNoArtBtn').addEventListener('click', ()=>preparePrintAndOpen(false, true));
   document.getElementById('makeKpNoPriceBtn').addEventListener('click', ()=>preparePrintAndOpen(true, false));
   document.getElementById('exportExcelBtn').addEventListener('click', exportExcel);
+  document.getElementById('saveHistoryBtn').addEventListener('click', saveCurrentToHistory);
 
   wireDragAndDrop(body);
 
@@ -1217,46 +1346,52 @@ async function fetchJsonSafe(url, fallback){
   }catch(e){ return fallback; }
 }
 
+let DATA_VERSION = String(Date.now()); // запасной вариант, если updated-at.json недоступен
+function withVersion(url){ return url + (url.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(DATA_VERSION); }
+
 async function loadData(){
   const grid = document.getElementById('grid');
   grid.innerHTML = `<div class="empty-msg" style="grid-column:1/-1;">Загружаю каталог...</div>`;
   try{
+    // updated-at.json запрашиваем без кэша браузера и раньше остальных — его
+    // значение (дата последнего автообновления) используем как "версию" для
+    // всех остальных data/*.json запросов, чтобы браузер не отдавал старые
+    // закэшированные файлы после того, как каталог обновился на сервере.
+    try{
+      const uRes = await fetch('data/updated-at.json', {cache:'no-store'});
+      if(uRes.ok){
+        const {updated_at} = await uRes.json();
+        if(updated_at) DATA_VERSION = updated_at;
+      }
+    }catch(e){ /* остаёмся на запасном варианте версии */ }
+
     const [vRes, wRes] = await Promise.all([
-      fetch('data/voltum-products.json'),
-      fetch('data/werkel-products.json'),
+      fetch(withVersion('data/voltum-products.json')),
+      fetch(withVersion('data/werkel-products.json')),
     ]);
     if(!vRes.ok || !wRes.ok) throw new Error('bad response');
     VOLTUM_PRODUCTS = await vRes.json();
     WERKEL_PRODUCTS = await wRes.json();
 
-    // track-products.json, voltum-extra.json and track-extra.json are optional —
-    // the site works fine without them yet
-    TRACK_PRODUCTS = await fetchJsonSafe('data/track-products.json', []);
-    const extras = await fetchJsonSafe('data/voltum-extra.json', []);
+    // track-products.json, voltum-extra.json и track-extra.json — опциональные,
+    // сайт нормально работает и без них
+    TRACK_PRODUCTS = await fetchJsonSafe(withVersion('data/track-products.json'), []);
+    const extras = await fetchJsonSafe(withVersion('data/voltum-extra.json'), []);
     const existingArts = new Set(VOLTUM_PRODUCTS.map(p=>p.a));
     extras.forEach(p=>{ if(!existingArts.has(p.a)) VOLTUM_PRODUCTS.push(p); });
 
-    const trackExtras = await fetchJsonSafe('data/track-extra.json', []);
+    const trackExtras = await fetchJsonSafe(withVersion('data/track-extra.json'), []);
     const existingTrackArts = new Set(TRACK_PRODUCTS.map(p=>p.a));
     trackExtras.forEach(p=>{ if(!existingTrackArts.has(p.a)) TRACK_PRODUCTS.push(p); });
 
     ALL_PRODUCTS = VOLTUM_PRODUCTS.concat(WERKEL_PRODUCTS, TRACK_PRODUCTS, CUSTOM_PRODUCTS);
-    renderUpdatedBadge();
+    const el = document.getElementById('updatedBadge');
+    if(el && DATA_VERSION) el.textContent = 'Обновлено: ' + DATA_VERSION;
     render();
   }catch(e){
     grid.innerHTML = `<div class="empty-msg" style="grid-column:1/-1;">Не удалось загрузить каталог (data/voltum-products.json, data/werkel-products.json). Если вы открыли файл напрямую с диска — запустите через локальный сервер или откройте через GitHub Pages.</div>`;
     console.error(e);
   }
-}
-
-async function renderUpdatedBadge(){
-  try{
-    const r = await fetch('data/updated-at.json');
-    if(!r.ok) return;
-    const {updated_at} = await r.json();
-    const el = document.getElementById('updatedBadge');
-    if(el && updated_at) el.textContent = 'Обновлено: ' + updated_at;
-  }catch(e){ /* optional, ignore if missing */ }
 }
 
 loadData();
