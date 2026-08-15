@@ -66,8 +66,18 @@
   .color-name-tag{font-size:11px;color:var(--text-dim);background:var(--surface2);border:1px solid var(--border);
     border-radius:20px;padding:5px 12px;display:flex;align-items:center;gap:6px;}
   .color-name-tag .dot{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);}
-  .brand-switch{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border);}
-  @media(max-width:900px){ .brand-switch{grid-template-columns:1fr 1fr;} }
+  .category-switch{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-bottom:1px solid var(--border);}
+  .category-cell{background:var(--surface2);padding:18px 24px;cursor:pointer;display:flex;align-items:center;gap:14px;transition:.15s;}
+  .category-cell:hover{background:var(--surface3);}
+  .category-cell.active{background:var(--surface);box-shadow:inset 0 -3px 0 var(--copper-bright);}
+  .category-cell .cname{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.04em;font-size:18px;font-weight:700;color:var(--text-dim);}
+  .category-cell.active .cname{color:var(--copper-bright);}
+  .category-cell .csub{font-size:11.5px;color:var(--text-mute);margin-top:2px;}
+  .category-cell .radio-dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex:none;display:flex;align-items:center;justify-content:center;}
+  .category-cell.active .radio-dot{border-color:var(--copper-bright);}
+  .category-cell.active .radio-dot::after{content:'';width:9px;height:9px;border-radius:50%;background:var(--copper-bright);}
+
+  .brand-switch{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;background:var(--border);border-bottom:1px solid var(--border);}
   .brand-cell{background:var(--surface);padding:16px 24px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:.15s;}
   .brand-cell:hover{background:var(--surface2);}
   .brand-cell.active{background:var(--surface3);box-shadow:inset 0 -3px 0 var(--copper);}
@@ -258,6 +268,7 @@
   <div class="badge"><b id="cartCountBadge">0</b> в КП · <b id="cartSumBadge">0 ₽</b></div>
 </header>
 
+<div class="category-switch" id="categorySwitch"></div>
 <div class="brand-switch" id="brandSwitch"></div>
 <div class="track-filters" id="trackFilters" style="display:none;"></div>
 
@@ -314,9 +325,30 @@
 <script>
 let VOLTUM_PRODUCTS = [];
 let WERKEL_PRODUCTS = [];
+let ARLIGHT_PRODUCTS = [];
 let TRACK_PRODUCTS = [];
 let CUSTOM_PRODUCTS = []; // товары, добавленные вручную (не из каталога)
 let ALL_PRODUCTS = [];
+
+// Раздел ("категория верхнего уровня") -> какие бренды в нём показывать.
+// 'scheme' — не бренд, а визуальный подбор по схеме трековой системы.
+const TOP_CATEGORIES = {
+  electro: {
+    label:'Электроустановка', sub:'Розетки, выключатели, светорегуляторы и другая электрофурнитура',
+    brands:['voltum','werkel','arlight'],
+  },
+  track: {
+    label:'Трековые системы', sub:'Шинопроводы, трековые светильники и компоненты',
+    brands:['myfar','maytoni','artelamp','stluce','scheme'],
+  },
+};
+
+// Вид (Вид/категория) товара у каждого бренда трек-систем хранится в общем
+// TRACK_PRODUCTS с полем 'br' — сюда сопоставляем ключ бренда на сайте с тем,
+// как бренд записан в данных.
+const TRACK_BRAND_DISPLAY = {myfar:'MyFar', maytoni:'Maytoni', artelamp:'Artelamp', stluce:'StLuce'};
+
+const TRACK_TYPE_ORDER = ['Трековые светильники','Шинопроводы','Линейные','Компоненты для трековых систем'];
 
 const BRAND_META = {
   voltum: {
@@ -329,11 +361,16 @@ const BRAND_META = {
     typeOrder:['Розетки','Выключатели','Переключатели','Светорегуляторы','Терморегуляторы','Подсветки','Датчики движения','Вывод кабеля','Заглушки','Изоляторы','Кнопки звонка','Коробки для накладного монтажа','Распределительные коробки','Рамки','Автоматические выключатели','Дифференциальные автоматы','Устройства защитного отключения','Реле напряжения','Кабеля','Провода','Лючки для розеток','Модульные розетки','Встроенные','Запчасти'],
     hasColors:false,
   },
-  track: {
-    label:'Трековые системы', sub:'Шинопроводы, трековые светильники и компоненты',
-    typeOrder:['Трековые светильники','Шинопроводы','Линейные','Компоненты для трековых систем'],
+  // У Arlight ещё нет проверенного списка категорий — typeOrder не задаём,
+  // typesPresent() в этом случае сама возьмёт всё, что реально есть в данных.
+  arlight: {
+    label:'Arlight', sub:'Электроустановочные изделия Arlight',
     hasColors:true,
   },
+  myfar: {label:'MyFar', sub:'Трековые системы MyFar', typeOrder:TRACK_TYPE_ORDER, hasColors:true},
+  maytoni: {label:'Maytoni', sub:'Трековые системы Maytoni', hasColors:true},
+  artelamp: {label:'Artelamp', sub:'Трековые системы Artelamp', hasColors:true},
+  stluce: {label:'StLuce', sub:'Трековые системы StLuce', hasColors:true},
   scheme: {
     label:'Трек. система — по схеме', sub:'Кликните элемент на схеме, чтобы подобрать товар',
     isScheme:true,
@@ -371,8 +408,8 @@ function isGlass(c){ return !!c && c.toLowerCase().includes('стекло'); }
 const ROOM_NONE = 'none';
 let roomIdSeq = 1;
 
-let state = { brand:'voltum', tab: 'all', color: 'all', search: '', sort: 'default', cart: {},
-  trackSystem: 'all', trackBrand: 'all', itemDiscounts: {}, orderDiscount: 0,
+let state = { topCategory:'electro', brand:'voltum', tab: 'all', color: 'all', search: '', sort: 'default', cart: {},
+  trackSystem: 'all', itemDiscounts: {}, orderDiscount: 0,
   rooms: [], activeRoomId: null }; // cart key: `${roomId||'none'}::${article}` -> qty
 
 function roomKeyOf(roomId){ return roomId || ROOM_NONE; }
@@ -391,22 +428,73 @@ function activeCartKey(article){ return cartKey(state.activeRoomId, article); }
 function currentProducts(){
   if(state.brand==='voltum') return VOLTUM_PRODUCTS;
   if(state.brand==='werkel') return WERKEL_PRODUCTS;
-  return TRACK_PRODUCTS;
+  if(state.brand==='arlight') return ARLIGHT_PRODUCTS;
+  const trackBrandName = TRACK_BRAND_DISPLAY[state.brand];
+  if(trackBrandName) return TRACK_PRODUCTS.filter(p=>p.br===trackBrandName);
+  return [];
 }
 function currentMeta(){ return BRAND_META[state.brand]; }
 
+function brandProductCount(brandKey){
+  if(brandKey==='voltum') return VOLTUM_PRODUCTS.length;
+  if(brandKey==='werkel') return WERKEL_PRODUCTS.length;
+  if(brandKey==='arlight') return ARLIGHT_PRODUCTS.length;
+  const trackBrandName = TRACK_BRAND_DISPLAY[brandKey];
+  if(trackBrandName) return TRACK_PRODUCTS.filter(p=>p.br===trackBrandName).length;
+  return 0;
+}
+
+function resetFiltersForNewBrand(){
+  state.tab = 'all'; state.color = 'all'; state.search = '';
+  state.trackSystem = 'all';
+  const si = document.getElementById('searchInput'); if(si) si.value = '';
+}
+
+function renderCategorySwitch(){
+  const el = document.getElementById('categorySwitch');
+  el.innerHTML = Object.keys(TOP_CATEGORIES).map(catKey=>{
+    const c = TOP_CATEGORIES[catKey];
+    return `<div class="category-cell ${state.topCategory===catKey?'active':''}" data-cat="${catKey}">
+      <span class="radio-dot"></span>
+      <div>
+        <div class="cname">${c.label}</div>
+        <div class="csub">${c.sub}</div>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.category-cell').forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+      const catKey = cell.dataset.cat;
+      if(state.topCategory===catKey) return;
+      state.topCategory = catKey;
+      state.brand = TOP_CATEGORIES[catKey].brands.find(b=>b!=='scheme') || TOP_CATEGORIES[catKey].brands[0];
+      resetFiltersForNewBrand();
+      render();
+    });
+  });
+}
+
 function renderBrandSwitch(){
   const el = document.getElementById('brandSwitch');
-  const cartByBrand = {voltum:0, werkel:0, track:0};
-  Object.entries(state.cart).forEach(([art,qty])=>{
-    const p = productByArt(art); if(p) cartByBrand[p.b] = (cartByBrand[p.b]||0)+qty;
+  const cartByBrand = {};
+  Object.entries(state.cart).forEach(([key,qty])=>{
+    const {article} = parseCartKey(key);
+    const p = productByArt(article);
+    if(p){
+      const bk = p.b==='track' ? Object.keys(TRACK_BRAND_DISPLAY).find(k=>TRACK_BRAND_DISPLAY[k]===p.br) : p.b;
+      if(bk) cartByBrand[bk] = (cartByBrand[bk]||0)+qty;
+    }
   });
-  const counts = {voltum:VOLTUM_PRODUCTS.length, werkel:WERKEL_PRODUCTS.length, track:TRACK_PRODUCTS.length};
-  el.innerHTML = ['voltum','werkel','track','scheme'].map(b=>{
+
+  const brandKeys = TOP_CATEGORIES[state.topCategory].brands;
+  el.innerHTML = brandKeys.map(b=>{
     const m = BRAND_META[b];
     let countLabel;
     if(m.isScheme) countLabel = 'визуальный подбор';
-    else countLabel = counts[b] ? counts[b]+' товаров' : 'наполняется';
+    else{
+      const count = brandProductCount(b);
+      countLabel = count ? count+' товаров' : 'наполняется';
+    }
     const cartNote = (!m.isScheme && cartByBrand[b]) ? ' · '+cartByBrand[b]+' в КП' : '';
     return `<div class="brand-cell ${state.brand===b?'active':''}" data-brand="${b}">
       <span class="radio-dot"></span>
@@ -421,39 +509,33 @@ function renderBrandSwitch(){
     cell.addEventListener('click', ()=>{
       if(state.brand===cell.dataset.brand) return;
       state.brand = cell.dataset.brand;
-      state.tab = 'all'; state.color = 'all'; state.search = '';
-      state.trackSystem = 'all'; state.trackBrand = 'all';
-      const si = document.getElementById('searchInput'); if(si) si.value = '';
+      resetFiltersForNewBrand();
       render();
     });
   });
 
   const tf = document.getElementById('trackFilters');
-  if(state.brand !== 'track'){ tf.style.display = 'none'; tf.innerHTML=''; return; }
+  const isTrackBrand = !!TRACK_BRAND_DISPLAY[state.brand];
+  if(!isTrackBrand){ tf.style.display = 'none'; tf.innerHTML=''; return; }
   tf.style.display = '';
-  const sysCounts = {}; const brandCounts = {};
-  TRACK_PRODUCTS.forEach(p=>{ if(p.sys) sysCounts[p.sys]=(sysCounts[p.sys]||0)+1; if(p.br) brandCounts[p.br]=(brandCounts[p.br]||0)+1; });
-  // brand pills are derived from whatever brands are actually in the data —
-  // right now that's just MyFar; more brands appear automatically once their data is added
-  const trackBrandsPresent = Object.keys(brandCounts).sort((a,b)=>a.localeCompare(b));
+  const sysCounts = {};
+  currentProducts().forEach(p=>{ if(p.sys) sysCounts[p.sys]=(sysCounts[p.sys]||0)+1; });
   tf.innerHTML = `
     <div class="track-filter-row">
       <span class="lbl">Тип системы:</span>
       <div class="pill ${state.trackSystem==='all'?'active':''}" data-tsys="all">Все</div>
       ${TRACK_SYSTEMS.map(s=>`<div class="pill ${state.trackSystem===s.id?'active':''}" data-tsys="${s.id}">${s.label}${sysCounts[s.id]?' ('+sysCounts[s.id]+')':''}</div>`).join('')}
-    </div>
-    ${trackBrandsPresent.length>1 ? `<div class="track-filter-row">
-      <span class="lbl">Бренд:</span>
-      <div class="pill ${state.trackBrand==='all'?'active':''}" data-tbrand="all">Все</div>
-      ${trackBrandsPresent.map(b=>`<div class="pill ${state.trackBrand===b?'active':''}" data-tbrand="${escapeAttr(b)}">${b} (${brandCounts[b]})</div>`).join('')}
-    </div>` : ''}`;
+    </div>`;
   tf.querySelectorAll('[data-tsys]').forEach(p=>p.addEventListener('click', ()=>{ state.trackSystem = p.dataset.tsys; render(); }));
-  tf.querySelectorAll('[data-tbrand]').forEach(p=>p.addEventListener('click', ()=>{ state.trackBrand = p.dataset.tbrand; render(); }));
 }
 
 function typesPresent(){
   const set = new Set(currentProducts().map(p=>p.t));
-  return currentMeta().typeOrder.filter(t=>set.has(t));
+  const order = currentMeta().typeOrder;
+  if(order) return order.filter(t=>set.has(t));
+  // бренд без заранее известного списка категорий (например, Arlight) —
+  // показываем все реально существующие "Вид", по алфавиту
+  return [...set].sort((a,b)=>a.localeCompare(b,'ru'));
 }
 
 function renderTabs(){
@@ -505,11 +587,13 @@ function renderSchemeHotspots(){
   el.querySelectorAll('.hotspot').forEach(hs=>{
     hs.addEventListener('click', ()=>{
       const h = SCHEME_HOTSPOTS[hs.dataset.idx];
-      state.brand = 'track';
+      // схема размечена по категориям конкретно MyFar — при клике ведём туда
+      state.topCategory = 'track';
+      state.brand = 'myfar';
       state.tab = h.tab;
       state.search = h.search || '';
       state.color = 'all';
-      state.trackSystem = 'all'; state.trackBrand = 'all';
+      state.trackSystem = 'all';
       const si = document.getElementById('searchInput'); if(si) si.value = state.search;
       render();
       window.scrollTo({top:0, behavior:'smooth'});
@@ -569,10 +653,7 @@ function filteredProducts(){
   let list = currentProducts().filter(p=>{
     if(state.tab!=='all' && p.t!==state.tab) return false;
     if(state.color!=='all' && p.c!==state.color) return false;
-    if(state.brand==='track'){
-      if(state.trackSystem!=='all' && p.sys!==state.trackSystem) return false;
-      if(state.trackBrand!=='all' && p.br!==state.trackBrand) return false;
-    }
+    if(TRACK_BRAND_DISPLAY[state.brand] && state.trackSystem!=='all' && p.sys!==state.trackSystem) return false;
     if(state.search){
       const q = state.search.toLowerCase();
       if(!p.a.toLowerCase().includes(q) && !p.n.toLowerCase().includes(q)) return false;
@@ -856,7 +937,7 @@ function loadHistoryEntry(id){
   (entry.customProducts||[]).forEach(p=>{
     if(!CUSTOM_PRODUCTS.find(x=>x.a===p.a)) CUSTOM_PRODUCTS.push(p);
   });
-  ALL_PRODUCTS = VOLTUM_PRODUCTS.concat(WERKEL_PRODUCTS, TRACK_PRODUCTS, CUSTOM_PRODUCTS);
+  ALL_PRODUCTS = VOLTUM_PRODUCTS.concat(WERKEL_PRODUCTS, ARLIGHT_PRODUCTS, TRACK_PRODUCTS, CUSTOM_PRODUCTS);
   state.cart = entry.cart || {};
   state.rooms = entry.rooms || [];
   state.itemDiscounts = entry.itemDiscounts || {};
@@ -1318,6 +1399,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':
 function escapeAttr(s){ return escapeHtml(s).replace(/"/g,'&quot;'); }
 
 function render(){
+  renderCategorySwitch();
   renderBrandSwitch();
 
   const isScheme = state.brand === 'scheme';
@@ -1373,9 +1455,10 @@ async function loadData(){
     VOLTUM_PRODUCTS = await vRes.json();
     WERKEL_PRODUCTS = await wRes.json();
 
-    // track-products.json, voltum-extra.json и track-extra.json — опциональные,
-    // сайт нормально работает и без них
+    // track-products.json, arlight-products.json, voltum-extra.json и
+    // track-extra.json — опциональные, сайт нормально работает и без них
     TRACK_PRODUCTS = await fetchJsonSafe(withVersion('data/track-products.json'), []);
+    ARLIGHT_PRODUCTS = await fetchJsonSafe(withVersion('data/arlight-products.json'), []);
     const extras = await fetchJsonSafe(withVersion('data/voltum-extra.json'), []);
     const existingArts = new Set(VOLTUM_PRODUCTS.map(p=>p.a));
     extras.forEach(p=>{ if(!existingArts.has(p.a)) VOLTUM_PRODUCTS.push(p); });
@@ -1384,7 +1467,7 @@ async function loadData(){
     const existingTrackArts = new Set(TRACK_PRODUCTS.map(p=>p.a));
     trackExtras.forEach(p=>{ if(!existingTrackArts.has(p.a)) TRACK_PRODUCTS.push(p); });
 
-    ALL_PRODUCTS = VOLTUM_PRODUCTS.concat(WERKEL_PRODUCTS, TRACK_PRODUCTS, CUSTOM_PRODUCTS);
+    ALL_PRODUCTS = VOLTUM_PRODUCTS.concat(WERKEL_PRODUCTS, ARLIGHT_PRODUCTS, TRACK_PRODUCTS, CUSTOM_PRODUCTS);
     const el = document.getElementById('updatedBadge');
     if(el && DATA_VERSION) el.textContent = 'Обновлено: ' + DATA_VERSION;
     render();
