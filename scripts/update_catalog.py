@@ -38,20 +38,33 @@ MANUFACTURER_COLUMNS = ["Фабрика", "Производитель", "Бре�
 BRANDS = {
     "voltum": "Voltum",
     "werkel": "Werkel",
+    "arlight": "Arlight",
 }
 
-# Бренды трековых систем, которые сейчас включены на сайте. Остальные
-# (Maytoni, Artelamp, StLuce, Novotech, Arlight) пока сознательно не берём —
-# добавятся сюда, когда будут готовы их данные/правила определения типа системы.
-TRACK_BRANDS = ["MyFar"]
+# Бренды трековых систем на сайте.
+TRACK_BRANDS = ["MyFar", "Maytoni", "Artelamp", "StLuce"]
 
-# Значение колонки "Группа" для трековых и шинных систем в выгрузке.
+# Значение колонки "Группа" для трековых и шинных систем — запасной способ
+# определить категорию товара, если в выгрузке нет колонки "Категории" (см. ниже).
 TRACK_GROUP_VALUE = "Трековые и шинные системы"
+
+# Колонка "Категории" в выгрузке — иерархический путь через " / ", например:
+#   "Электроустановочные изделия / Механизмы / Диммеры"
+#   "Интерьерные светильники / Трековые и шинные системы / Трековые светильники"
+# Это основной способ понять, к какому разделу сайта (Электроустановка или
+# Трековые системы) относится товар — точнее, чем одна "Группа", особенно для
+# брендов вроде Arlight, у которых в одной выгрузке могут быть товары обоих
+# разделов и нужно взять только нужный.
+CATEGORY_COLUMN_CANDIDATES = ["Категории", "Категория"]
+CATEGORY_ELECTRO_MARKER = "Электроустановочные изделия"
+CATEGORY_TRACK_MARKER = "Трековые и шинные системы"
 
 # Определение типа системы (однофазная/магнитная) по названию серии (колонка
 # "Серия") — специфично для каждого бренда, т.к. одинаковые слова у разных
 # брендов означают разное. Сопоставление даётся как список ключевых слов,
 # которые ищутся в значении "Серия" (регистронезависимо, по вхождению).
+# Для Maytoni/Artelamp/StLuce пока нет проверенных ключевых слов — если бренд
+# не упомянут здесь, тип системы просто не проставляется (не гадаем).
 BRAND_SYSTEM_KEYWORDS = {
     "MyFar": {
         "magnetic": ["magline", "flowpoint", "flow", "ray", "sphere", "neon"],
@@ -111,6 +124,15 @@ def find_column_soft(df: pd.DataFrame, name: str):
     for c in df.columns:
         if re.sub(r"\s+", " ", str(c)).strip().lower() == norm:
             return c
+    return None
+
+
+def find_column_soft_any(df: pd.DataFrame, candidates) -> str:
+    """Как find_column_soft, но пробует несколько вариантов имени по очереди."""
+    for name in candidates:
+        col = find_column_soft(df, name)
+        if col:
+            return col
     return None
 
 
@@ -301,7 +323,11 @@ def build_track_records(df: pd.DataFrame, name_col, type_col, art_col, price_col
         article = str(r[art_col]).strip()
         name = r[name_col]
         vid = r[type_col]
-        brand = str(r[manu_col]).strip()
+        raw_brand = str(r[manu_col]).strip()
+        # приводим к канонической записи из TRACK_BRANDS (на сайте и в фильтрах
+        # используется именно она — иначе "St Luce"/"StLuce" из разных выгрузок
+        # разъедутся и превратятся в два разных "бренда" на сайте).
+        brand = next((b for b in TRACK_BRANDS if normalize_brand(b) == normalize_brand(raw_brand)), raw_brand)
 
         img = r[photo_col]
         img = img if isinstance(img, str) and img.strip() else None
@@ -385,6 +411,26 @@ def build_records(df: pd.DataFrame, brand_key: str, name_col, type_col, art_col,
     return records
 
 
+def build_category_masks(df: pd.DataFrame, cat_col: str):
+    """По колонке 'Категории' (иерархический путь через ' / ') строит две
+    маски: какие строки относятся к электроустановочным изделиям, какие — к
+    трековым и шинным системам. Возвращает (None, None), если колонки нет —
+    вызывающий код тогда сам решает, на какой запасной вариант переключиться."""
+    if cat_col is None:
+        return None, None
+    cat_str = df[cat_col].astype(str)
+    electro_mask = cat_str.str.contains(CATEGORY_ELECTRO_MARKER, case=False, na=False, regex=False)
+    track_mask = cat_str.str.contains(CATEGORY_TRACK_MARKER, case=False, na=False, regex=False)
+    return electro_mask, track_mask
+
+
+def normalize_brand(value) -> str:
+    """Убирает пробелы и приводит к нижнему регистру — чтобы 'St Luce' и
+    'StLuce' считались одним и тем же брендом независимо от того, как именно
+    их написали в конкретной выгрузке."""
+    return re.sub(r"\s+", "", str(value)).strip().lower()
+
+
 def main():
     if not EXPORT_URL:
         raise SystemExit("Переменная окружения CATALOG_EXPORT_URL не задана.")
@@ -400,6 +446,16 @@ def main():
     stock_col = find_column(df, ["Остаток поставщика", "Остаток"])
     photo_col = find_column(df, ["Основное фото", "Фото"])
     series_col = "Серия" if "Серия" in df.columns else None
+    cat_col = find_column_soft_any(df, CATEGORY_COLUMN_CANDIDATES)
+    electro_mask, track_cat_mask = build_category_masks(df, cat_col)
+    if cat_col:
+        log(f"Нашёл колонку категорий: '{cat_col}' — использую её, чтобы отделить "
+            f"электроустановочные изделия от трековых систем (особенно важно для брендов, "
+            f"у которых в выгрузке есть и то, и другое, например Arlight).")
+    else:
+        log("⚠️  Не нашёл колонку 'Категории'/'Категория' в выгрузке — беру товары бренда "
+            "целиком, без разделения на электрику/трек (если у бренда есть и то и другое, "
+            "это может привести к лишним позициям).")
 
     # общее переименование категорий
     df[type_col] = df[type_col].replace({"Диммеры": "Светорегуляторы"})
@@ -409,9 +465,14 @@ def main():
     summary = {}
 
     for brand_key, brand_name in BRANDS.items():
-        brand_df = df[df[manu_col].astype(str).str.strip().str.lower() == brand_name.lower()].copy()
+        brand_mask = df[manu_col].apply(normalize_brand) == normalize_brand(brand_name)
+        if electro_mask is not None:
+            brand_df = df[brand_mask & electro_mask].copy()
+        else:
+            brand_df = df[brand_mask].copy()
         if brand_df.empty:
-            log(f"⚠️  Не нашёл ни одной позиции бренда {brand_name} — проверьте колонку '{manu_col}'.")
+            log(f"⚠️  Не нашёл ни одной позиции бренда {brand_name} в разделе «Электроустановка» "
+                f"— проверьте колонку '{manu_col}' (и '{cat_col}', если она есть).")
         records = build_records(
             brand_df, brand_key, name_col, type_col, art_col, price_col, stock_col, photo_col, series_col
         )
@@ -421,17 +482,22 @@ def main():
         summary[brand_key] = len(records)
         log(f"{brand_name}: {len(records)} товаров -> {out_path}")
 
-    # Трековые системы: Фабрика из TRACK_BRANDS И Группа = "Трековые и шинные системы".
-    # Если группа так не называется в этой выгрузке — берём всё для этих брендов
-    # (лучше показать, чем ничего) и пишем предупреждение в лог.
-    track_brand_mask = df[manu_col].astype(str).str.strip().str.lower().isin([b.lower() for b in TRACK_BRANDS])
-    group_col = find_column_soft(df, "Группа")
-    if group_col:
-        track_group_mask = df[group_col].astype(str).str.strip() == TRACK_GROUP_VALUE
-        track_df = df[track_brand_mask & track_group_mask].copy()
+    # Трековые системы: Фабрика из TRACK_BRANDS + категория "Трековые и шинные
+    # системы". Порядок запасных вариантов, если колонки категорий нет:
+    # старая колонка "Группа" (точное совпадение), а если и её нет — берём всё
+    # для этих брендов целиком (лучше показать лишнее, чем ничего).
+    track_brand_mask = df[manu_col].apply(normalize_brand).isin([normalize_brand(b) for b in TRACK_BRANDS])
+    if track_cat_mask is not None:
+        track_df = df[track_brand_mask & track_cat_mask].copy()
     else:
-        log(f"⚠️  Не нашёл колонку 'Группа' — беру все строки брендов {TRACK_BRANDS} без фильтра по группе.")
-        track_df = df[track_brand_mask].copy()
+        group_col = find_column_soft(df, "Группа")
+        if group_col:
+            track_group_mask = df[group_col].astype(str).str.strip() == TRACK_GROUP_VALUE
+            track_df = df[track_brand_mask & track_group_mask].copy()
+        else:
+            log(f"⚠️  Не нашёл ни колонку категорий, ни 'Группа' — беру все строки брендов "
+                f"{TRACK_BRANDS} без фильтра по разделу.")
+            track_df = df[track_brand_mask].copy()
 
     track_records = build_track_records(track_df, name_col, type_col, art_col, price_col, stock_col, photo_col, series_col, manu_col)
     with open(os.path.join(DATA_DIR, "track-products.json"), "w", encoding="utf-8") as f:
@@ -439,8 +505,13 @@ def main():
     summary["track"] = len(track_records)
     log(f"Трековые системы: {len(track_records)} товаров -> data/track-products.json")
     if len(track_records) == 0:
-        log(f"ℹ️  Не нашёл строк с Фабрика in {TRACK_BRANDS} и Группа='{TRACK_GROUP_VALUE}'. "
-            f"Проверьте точные значения этих колонок в выгрузке.")
+        log(f"ℹ️  Не нашёл строк с Фабрика in {TRACK_BRANDS} в разделе трековых систем. "
+            f"Проверьте точные значения колонок производителя/категории в выгрузке.")
+    else:
+        by_brand = {}
+        for r in track_records:
+            by_brand[r.get("br")] = by_brand.get(r.get("br"), 0) + 1
+        log(f"  из них по брендам: {by_brand}")
 
     with open(os.path.join(DATA_DIR, "updated-at.json"), "w", encoding="utf-8") as f:
         json.dump({"updated_at": datetime.date.today().strftime("%d.%m.%Y")}, f, ensure_ascii=False)
