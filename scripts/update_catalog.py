@@ -99,8 +99,26 @@ def log(*args):
 
 def download_export(url: str) -> pd.DataFrame:
     log(f"Скачиваю выгрузку: {url[:60]}...")
-    resp = requests.get(url, timeout=120)
-    resp.raise_for_status()
+    try:
+        resp = requests.get(url, timeout=120)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        raise SystemExit(
+            f"Не удалось скачать выгрузку — сервер ответил {status}. "
+            f"Скорее всего, ссылка в секрете CATALOG_EXPORT_URL устарела (у таких "
+            f"ссылок с токеном обычно есть срок действия, поставщик периодически "
+            f"его обновляет). Откройте ту же ссылку в браузере: если там тоже "
+            f"ошибка — возьмите у поставщика свежую ссылку на выгрузку и обновите "
+            f"секрет CATALOG_EXPORT_URL (Settings → Secrets and variables → "
+            f"Actions → CATALOG_EXPORT_URL → Update)."
+        ) from e
+    except requests.exceptions.RequestException as e:
+        raise SystemExit(
+            f"Не удалось скачать выгрузку — сетевая ошибка: {e}. "
+            f"Попробуйте запустить workflow ещё раз чуть позже — возможно, "
+            f"сервер поставщика временно недоступен."
+        ) from e
     return pd.read_excel(io.BytesIO(resp.content))
 
 
@@ -260,6 +278,13 @@ def voltum_full_name(article: str, vid: str, fallback_name: str):
             return f"{VOLTUM_SOCKET_NAMES[key]} S70{suffix}"
         return fallback_name
 
+    if vid == "Подсветки" and cc == "07":
+        if ss == "07":
+            return f"Встраиваемая LED подсветка S70{suffix} с датчиком"
+        if ss == "06":
+            return f"Встраиваемая LED подсветка S70{suffix}"
+        # другие подтипы Подсветки не подтверждены — оставляем как есть
+
     if vid in ("Выключатели", "Переключатели"):
         by_cc = VOLTUM_SWITCH_SUBTYPE_BY_CC.get((cc, ss))
         if by_cc and vid == "Выключатели":
@@ -275,6 +300,26 @@ def voltum_full_name(article: str, vid: str, fallback_name: str):
             return f"{base} встраиваемый VOLTUM S70{suffix} {amps}"
 
     return fallback_name
+
+
+def reclassify_voltum_output_categories(records):
+    """Выносит в отдельные вкладки сайта: "голые" механизмы (артикул VLSxxxxM),
+    акустические розетки (VLS0603xx) и накладки/клавиши из "Запчастей".
+    Работает на уже готовых записях (после voltum_full_name), чтобы названия
+    по-прежнему собирались по исходному "Виду"; категория для сайта меняется
+    последним шагом. Все правила узкие и привязаны к артикулу/началу названия."""
+    mech_re = re.compile(r"^VLS\d{4}M$")
+    acoustic_re = re.compile(r"^VLS0603\d{2}$")
+    cover_re = re.compile(r"^(Накладка для|Клавиши для) ")
+    for r in records:
+        art = r["a"]
+        if mech_re.match(art):
+            r["t"] = "Механизмы"
+        elif r["t"] == "Розетки" and acoustic_re.match(art):
+            r["t"] = "Акустические розетки"
+        elif r["t"] == "Запчасти" and cover_re.match(str(r["n"])):
+            r["t"] = "Накладки/клавиши"
+    return records
 
 
 def fix_switch_category(df: pd.DataFrame, art_col: str, name_col: str, type_col: str) -> pd.DataFrame:
@@ -476,6 +521,8 @@ def main():
         records = build_records(
             brand_df, brand_key, name_col, type_col, art_col, price_col, stock_col, photo_col, series_col
         )
+        if brand_key == "voltum":
+            records = reclassify_voltum_output_categories(records)
         out_path = os.path.join(DATA_DIR, f"{brand_key}-products.json")
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(records, f, ensure_ascii=False)
